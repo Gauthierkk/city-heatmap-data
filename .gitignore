@@ -1,0 +1,6 @@
+__pycache__/
+*.pyc
+logs/
+.refresh.lock/
+.venv/
+venv/
