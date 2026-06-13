@@ -9,7 +9,7 @@ keep working without it.  Install once with:
     pip3 install duckdb --user --break-system-packages   # python3 3.11+
     # or for python3.10: pip3.10 install duckdb --user
 
-See data/README.md for full dependency notes.
+See fetcher/README.md for full dependency notes.
 """
 
 from __future__ import annotations
@@ -17,7 +17,8 @@ from __future__ import annotations
 import sys
 from typing import Any
 
-from .cities import CityDef
+from ..cities import CityDef
+from ..transform.geojson_io import make_feature
 
 # ---------------------------------------------------------------------------
 # Release pin — bump deliberately when a newer Overture release is available.
@@ -69,7 +70,10 @@ SELECT
     categories.primary                     AS overture_category,
     confidence,
     ST_X(geometry)                         AS lon,
-    ST_Y(geometry)                         AS lat
+    ST_Y(geometry)                         AS lat,
+    addresses[1].freeform                  AS addr_street,
+    addresses[1].locality                  AS addr_city,
+    addresses[1].postcode                  AS addr_postcode
 FROM read_parquet('{s3_path}', hive_partitioning=1)
 WHERE bbox.xmin >= {min_lon}
   AND bbox.xmax <= {max_lon}
@@ -83,36 +87,18 @@ ORDER BY confidence DESC, names.primary
 """
 
 
-def _get_city_bbox(city: CityDef) -> tuple[float, float, float, float]:
-    """Return (min_lon, min_lat, max_lon, max_lat) from the city's bbox.
+def fetch_overture(city: CityDef, dataset_id: str = 'fitness') -> dict[str, Any]:
+    """Return a GeoJSON FeatureCollection of Overture places for city.
 
-    The bbox is read from data/cities.py where it mirrors src/cities.ts.
-    Cities.py doesn't store bbox directly — we derive it from the cities.ts
-    values hard-coded here to avoid a TS parse dependency.
-    """
-    # Mirrors src/cities.ts CITIES[id].bbox exactly.
-    _BBOX: dict[str, tuple[float, float, float, float]] = {
-        # (minLng, minLat, maxLng, maxLat)
-        'paris':  (2.224, 48.815, 2.470, 48.902),
-        'nyc':    (-74.259, 40.477, -73.700, 40.917),
-        'austin': (-97.937, 30.099, -97.561, 30.517),
-    }
-    if city.id not in _BBOX:
-        raise ValueError(
-            f'No bbox configured for city "{city.id}" in overture.py._BBOX. '
-            'Add it to match src/cities.ts.'
-        )
-    return _BBOX[city.id]
-
-
-def fetch_overture_fitness(city: CityDef) -> dict[str, Any]:
-    """Return a GeoJSON FeatureCollection of Overture fitness places for city.
-
-    Each feature has properties: {id, name, shop, source}.
+    Overture coverage here is fitness-only. Each feature carries a structured
+    address {street, city, postcode} when Overture has one (no housenumber field).
     id is 'overture/<gers-id>', coordinates are 6-decimal.
 
     Raises ImportError (with install instructions) if duckdb is missing.
     """
+    if dataset_id != 'fitness':
+        return {'type': 'FeatureCollection', 'features': []}
+
     try:
         import duckdb  # noqa: F401 — lazy import
     except ImportError:
@@ -125,7 +111,7 @@ def fetch_overture_fitness(city: CityDef) -> dict[str, Any]:
 
     import duckdb
 
-    min_lon, min_lat, max_lon, max_lat = _get_city_bbox(city)
+    min_lon, min_lat, max_lon, max_lat = city.bbox
     query = _QUERY_TMPL.format(
         s3_path=_S3_PATH,
         min_lon=min_lon,
@@ -151,22 +137,13 @@ def fetch_overture_fitness(city: CityDef) -> dict[str, Any]:
     print(f'  Retrieved {len(rows)} Overture candidates for {city.id}', file=sys.stderr)
 
     features: list[dict[str, Any]] = []
-    for gers_id, name, cat, _confidence, lon, lat in rows:
+    for gers_id, name, cat, _confidence, lon, lat, addr_street, addr_city, addr_postcode in rows:
         canonical = _CATEGORY_TO_TYPE.get(cat)
         if canonical is None:
             continue  # shouldn't happen given cat_list filter, but be safe
-        features.append({
-            'type': 'Feature',
-            'geometry': {
-                'type': 'Point',
-                'coordinates': [round(float(lon), 6), round(float(lat), 6)],
-            },
-            'properties': {
-                'id': f'overture/{gers_id}',
-                'name': name,
-                'shop': canonical,
-                'source': 'overture',
-            },
-        })
+        features.append(make_feature(
+            f'overture/{gers_id}', name, canonical, lon, lat,
+            {'street': addr_street, 'city': addr_city, 'postcode': addr_postcode},
+        ))
 
     return {'type': 'FeatureCollection', 'features': features}

@@ -20,9 +20,9 @@ import urllib.parse
 import urllib.request
 from typing import Any
 
-from .cities import CityDef
+from ..cities import CityDef
 
-USER_AGENT = 'grocery-heatmap/0.1 (boundary fetch script)'
+USER_AGENT = 'city-heatmap-data/0.1 (boundary fetch worker)'
 
 OVERPASS_ENDPOINTS = [
     'https://overpass-api.de/api/interpreter',

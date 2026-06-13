@@ -16,6 +16,9 @@ class CityDef:
     wikidata: str          # used as Overpass area selector
     relation: int          # primary OSM admin relation id
     timeout: int           # Overpass timeout in seconds (stores queries)
+    # Bounding box (minLon, minLat, maxLon, maxLat); mirrors src/cities.ts bbox.
+    # Used by bbox-based providers (Overture, Geoapify).
+    bbox: tuple[float, float, float, float]
     # Per-city tolerance for Douglas-Peucker boundary simplification (degrees)
     tolerance_deg: float
     # Plausible area range for the simplified boundary polygon (km²)
@@ -32,6 +35,7 @@ CITIES: dict[str, CityDef] = {
         wikidata='Q90',
         relation=71525,
         timeout=180,
+        bbox=(2.224, 48.815, 2.470, 48.902),
         # ~15 m tolerance: invisible at the overlay's 50 m cell resolution
         tolerance_deg=0.00015,
         # ~105 km² (intra-muros incl. both bois)
@@ -43,6 +47,7 @@ CITIES: dict[str, CityDef] = {
         wikidata='Q60',
         relation=175905,
         timeout=300,
+        bbox=(-74.259, 40.477, -73.700, 40.917),
         # coarser tolerance: NYC overlay cells are ≥100 m
         tolerance_deg=0.0004,
         # ~784 km² of land; the OSM admin polygon extends into harbour/bay water,
@@ -57,6 +62,7 @@ CITIES: dict[str, CityDef] = {
         wikidata='Q16559',
         relation=113314,
         timeout=240,
+        bbox=(-97.937, 30.099, -97.561, 30.517),
         # ~33 m tolerance: invisible at the overlay's 100 m cell resolution
         tolerance_deg=0.0003,
         # ~704 km² land (2020 census); the OSM polygon has ~56 inner holes

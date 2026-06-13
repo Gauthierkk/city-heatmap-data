@@ -7,7 +7,7 @@
 # commits + pushes them so GitHub Pages redeploys. Boundaries are NOT part of
 # the weekly job (they rarely change — refresh them manually when needed):
 #
-#     python3 -m data fetch-boundary <city> --out-dir ../city-heatmap-front/public/data
+#     python3 -m fetcher fetch-boundary <city> --out-dir ../city-heatmap-front/public/data
 #
 # Designed to be idempotent and cron-safe. Intended cron entry (weekly):
 #
@@ -51,7 +51,7 @@ fi
 # --- Regenerate all store data into the front-end repo ------------------------
 echo "--- fetching all cities x datasets ---"
 cd "$SCRIPT_DIR"
-python3 -m data fetch-stores --all --out-dir "$FRONT_DIR/public/data"
+python3 -m fetcher fetch-stores --all --out-dir "$FRONT_DIR/public/data"
 
 # --- Commit + push only if something actually changed -------------------------
 git -C "$FRONT_DIR" add public/data

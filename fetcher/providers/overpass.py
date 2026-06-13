@@ -12,7 +12,8 @@ import json
 import sys
 from typing import Any
 
-from .cities import CityDef
+from ..cities import CityDef
+from ..transform.geojson_io import make_feature
 
 OVERPASS_ENDPOINTS = [
     'https://overpass-api.de/api/interpreter',
@@ -227,3 +228,46 @@ def fetch_overpass(query: str) -> dict[str, Any]:
     raise RuntimeError(
         f'All Overpass endpoints failed. Last error: {last_error}'
     )
+
+
+# ---------------------------------------------------------------------------
+# Provider entry point
+# ---------------------------------------------------------------------------
+
+def _osm_address(tags: dict[str, str]) -> dict[str, str]:
+    """Extract a structured address from OSM addr:* tags (only present keys)."""
+    return {
+        'housenumber': tags.get('addr:housenumber', ''),
+        'street': tags.get('addr:street', ''),
+        'postcode': tags.get('addr:postcode', ''),
+        'city': tags.get('addr:city', ''),
+    }
+
+
+def fetch_osm(city: CityDef, dataset_id: str) -> dict[str, Any]:
+    """Provider entry point: query Overpass and return a normalised FeatureCollection."""
+    dataset = dataset_by_id(dataset_id)
+    raw = fetch_overpass(dataset['build_query'](city))
+    normalise = dataset['normalise']
+
+    features: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for el in raw.get('elements') or []:
+        lat = el.get('lat') or (el.get('center') or {}).get('lat')
+        lon = el.get('lon') or (el.get('center') or {}).get('lon')
+        if lat is None or lon is None:
+            continue
+        tags: dict[str, str] = el.get('tags') or {}
+        canonical = normalise(tags)
+        if canonical is None:
+            continue
+        feat_id = f"{el['type']}/{el['id']}"
+        if feat_id in seen:
+            continue
+        seen.add(feat_id)
+        features.append(make_feature(
+            feat_id, tags.get('name'), canonical, lon, lat, _osm_address(tags),
+        ))
+
+    print(f'  osm: {len(features)} features for {city.id}/{dataset_id}')
+    return {'type': 'FeatureCollection', 'features': features}

@@ -1,10 +1,10 @@
-"""Command-line interface for the data package.
+"""Command-line interface for the fetcher package.
 
 Commands:
   fetch-stores [city] [dataset]   — refresh store data from Overpass (+ Overture for fitness)
   fetch-boundary [city]           — refresh city admin boundary from OSM
 
-Defaults: paris, food  (same as the retired Node scripts)
+Defaults: paris, food
 """
 
 from __future__ import annotations
@@ -16,24 +16,26 @@ import time
 from pathlib import Path
 
 from .cities import CITIES, city_by_id
-from .overpass import DATASETS, dataset_by_id, fetch_overpass
-from .geojson_io import check_guard, print_counts, to_geojson, write_geojson
-from .boundary import fetch_boundary
+from .providers import PROVIDER_NAMES, providers_for
+from .providers.overpass import DATASETS, dataset_by_id
+from .providers.boundary import fetch_boundary
+from .transform.aggregate import aggregate
+from .transform.geojson_io import check_guard, print_counts, write_geojson
 
 
 # Default output dir: the sibling front-end repo's public/data/. Standard layout
 # is  <parent>/city-heatmap-data/  and  <parent>/city-heatmap-front/ , so from this
-# file:  data/ → city-heatmap-data/ → <parent>/ → city-heatmap-front/public/data .
+# file:  fetcher/ → city-heatmap-data/ → <parent>/ → city-heatmap-front/public/data .
 # The weekly-refresh wrapper always passes --out-dir explicitly; this is the fallback.
 _PUBLIC_DATA = Path(__file__).parent.parent.parent / 'city-heatmap-front' / 'public' / 'data'
 
-# Drop guard: refuse to write if new merged total is below this fraction of
-# the committed file's feature count (protects against silent Overture outages).
+# Drop guard: refuse to write if the new aggregated total is below this fraction
+# of the committed file's feature count (protects against a silent provider outage).
 _DROP_GUARD_FRACTION = 0.70
 
 
 def _check_drop_guard(merged_geojson: dict, out_file: Path, city_id: str, dataset_id: str) -> None:
-    """Refuse to write if merged total dropped below 70 % of the committed file."""
+    """Refuse to write if the new total dropped below 70 % of the committed file."""
     if not out_file.exists():
         return  # no committed baseline — nothing to check
     try:
@@ -48,75 +50,94 @@ def _check_drop_guard(merged_geojson: dict, out_file: Path, city_id: str, datase
         print(
             f'Drop guard triggered for {city_id}/{dataset_id}: '
             f'new total {new_count} < {_DROP_GUARD_FRACTION:.0%} of '
-            f'committed {existing_count} ({threshold:.0f}). '
-            'Refusing to write. Re-run with --no-overture if Overture S3 is unavailable.',
+            f'committed {existing_count} ({threshold:.0f}). Refusing to write — '
+            'a provider may be down. Investigate, or narrow --providers and retry.',
             file=sys.stderr,
         )
         sys.exit(1)
 
 
-def _fetch_stores_one(city_id: str, dataset_id: str, out_dir: Path, no_overture: bool = False) -> None:
-    """Fetch one city + dataset combination and write the GeoJSON file."""
+def _fetch_stores_one(
+    city_id: str,
+    dataset_id: str,
+    out_dir: Path,
+    allow: set[str] | None,
+    deny: set[str],
+) -> None:
+    """Fetch one city + dataset from every selected provider, aggregate, and write."""
     city = city_by_id(city_id)
     dataset = dataset_by_id(dataset_id)
 
-    query = dataset['build_query'](city)
-    raw = fetch_overpass(query)
-    osm_geojson = to_geojson(raw, dataset['normalise'])
+    selected = providers_for(dataset_id, allow, deny)
+    print(f'Providers for {city_id}/{dataset_id}: {", ".join(p.name for p in selected) or "(none)"}')
 
-    # OSM guard applied BEFORE merging
-    check_guard(osm_geojson, city_id, dataset_id, dataset['min_features'])
-
-    if dataset_id == 'fitness' and not no_overture:
-        # Overture merge path
-        from .overture import fetch_overture_fitness
-        from .merge import merge_fitness
-
+    collections = []
+    osm_ok = False
+    for provider in selected:
         try:
-            overture_geojson = fetch_overture_fitness(city)
-        except ImportError as exc:
-            print(f'Warning: {exc}', file=sys.stderr)
-            print('Falling back to OSM-only (as if --no-overture were set).', file=sys.stderr)
-            overture_geojson = {'type': 'FeatureCollection', 'features': []}
+            fc = provider.fetch(city, dataset_id)
+        except Exception as exc:
+            # A secondary provider failing is non-fatal — log and carry on so the
+            # run still produces data from the others.
+            print(f'Warning: provider "{provider.name}" failed: {exc}', file=sys.stderr)
+            continue
+        collections.append(fc)
+        if provider.name == 'osm' and fc.get('features'):
+            osm_ok = True
 
-        final_geojson = merge_fitness(osm_geojson, overture_geojson)
-    else:
-        # OSM-only path (food, or fitness with --no-overture)
-        final_geojson = osm_geojson
+    # OSM is the comprehensive backbone — its min-features guard still applies.
+    if not osm_ok:
+        print(f'Refusing to write {city_id}/{dataset_id}: OSM returned no data.', file=sys.stderr)
+        sys.exit(1)
+
+    # Fitness types (gym/yoga/...) are alternate labels for one venue, so match
+    # across types there; food types are distinct categories, so require same type.
+    final_geojson = aggregate(collections, cross_type=(dataset_id == 'fitness'))
+    check_guard(final_geojson, city_id, dataset_id, dataset['min_features'])
 
     # Nested layout: public/data/<city>/<dataset>.geojson  (e.g. paris/food.geojson)
     out_file = out_dir / city_id / f'{dataset_id}.geojson'
     out_file.parent.mkdir(parents=True, exist_ok=True)
 
-    # Drop guard: compare against committed baseline (fitness only, where merge can fluctuate).
-    # Skip when --no-overture is set: the caller knows the output will be OSM-only.
-    if dataset_id == 'fitness' and not no_overture:
-        _check_drop_guard(final_geojson, out_file, city_id, dataset_id)
-
+    _check_drop_guard(final_geojson, out_file, city_id, dataset_id)
     print_counts(final_geojson, city_id, dataset_id)
     write_geojson(final_geojson, str(out_file))
 
 
 def cmd_fetch_stores(args: argparse.Namespace) -> None:
     out_dir = Path(args.out_dir) if args.out_dir else _PUBLIC_DATA
-    no_overture = getattr(args, 'no_overture', False)
+
+    # Provider selection: --providers is an allowlist; --no-overture / --no-geoapify
+    # are convenience deny flags layered on top.
+    allow: set[str] | None = None
+    if args.providers:
+        allow = {p.strip() for p in args.providers.split(',') if p.strip()}
+        unknown = allow - set(PROVIDER_NAMES)
+        if unknown:
+            raise ValueError(f'Unknown provider(s): {", ".join(sorted(unknown))}. '
+                             f'Available: {", ".join(PROVIDER_NAMES)}')
+    deny: set[str] = set()
+    if getattr(args, 'no_overture', False):
+        deny.add('overture')
+    if getattr(args, 'no_geoapify', False):
+        deny.add('geoapify')
 
     if args.all:
-        # All cities × datasets with a polite ~10 s sleep between Overpass calls
+        # All cities × datasets with a polite ~10 s sleep between provider rounds
         combos = [(c, d) for c in CITIES for d in DATASETS]
         for i, (city_id, dataset_id) in enumerate(combos):
             if i > 0:
-                print('Sleeping 10 s between Overpass calls ...')
+                print('Sleeping 10 s between provider rounds ...')
                 time.sleep(10)
             print(f'--- {city_id}/{dataset_id} ---')
-            _fetch_stores_one(city_id, dataset_id, out_dir, no_overture=no_overture)
+            _fetch_stores_one(city_id, dataset_id, out_dir, allow, deny)
     else:
         city_id = args.city or 'paris'
         dataset_id = args.dataset or 'food'
         # Validate early so we get a clean error before hitting the network
         city_by_id(city_id)
         dataset_by_id(dataset_id)
-        _fetch_stores_one(city_id, dataset_id, out_dir, no_overture=no_overture)
+        _fetch_stores_one(city_id, dataset_id, out_dir, allow, deny)
 
 
 def cmd_fetch_boundary(args: argparse.Namespace) -> None:
@@ -134,7 +155,7 @@ def cmd_fetch_boundary(args: argparse.Namespace) -> None:
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        prog='python3 -m data',
+        prog='python3 -m fetcher',
         description='Fetch store / boundary data from Overpass and write GeoJSON.',
     )
     sub = parser.add_subparsers(dest='command', required=True)
@@ -168,13 +189,25 @@ def build_parser() -> argparse.ArgumentParser:
         help='Write GeoJSON files here instead of public/data/',
     )
     p_stores.add_argument(
+        '--providers',
+        default=None,
+        metavar='LIST',
+        help=(
+            'Comma-separated allowlist of providers to query '
+            f'(available: {", ".join(PROVIDER_NAMES)}). Default: all that serve the dataset.'
+        ),
+    )
+    p_stores.add_argument(
         '--no-overture',
         action='store_true',
         default=False,
-        help=(
-            'Skip the Overture merge step and use OSM data only. '
-            'Useful when DuckDB/S3 is unavailable or for debugging.'
-        ),
+        help='Skip the Overture provider (e.g. when DuckDB/S3 is unavailable).',
+    )
+    p_stores.add_argument(
+        '--no-geoapify',
+        action='store_true',
+        default=False,
+        help='Skip the Geoapify provider (e.g. when the API key is unset or over quota).',
     )
 
     # --- fetch-boundary ---

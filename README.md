@@ -14,7 +14,7 @@ server):
 ```
 city-heatmap/
   ├── city-heatmap-front/   ← app + committed data; gets pushed to (deploy-key write access)
-  └── city-heatmap-data/    ← this repo: Python `data/` module + weekly-refresh.sh
+  └── city-heatmap-data/    ← this repo: Python `fetcher/` module + weekly-refresh.sh
 ```
 
 The front end loads data same-origin from `public/data/<city>/{food,fitness,boundary}.geojson`,
@@ -27,25 +27,32 @@ so the data must live in the front-end repo — this worker only *generates* it.
 1. Takes a single-instance lock.
 2. `git -C ../city-heatmap-front pull --ff-only` (the worker only ever touches
    `public/data/`; humans own the code, so this stays fast-forward).
-3. `python3 -m data fetch-stores --all --out-dir ../city-heatmap-front/public/data`
-   — 6 files (paris/nyc/austin × food/fitness), ~10 s between Overpass calls.
+3. `python3 -m fetcher fetch-stores --all --out-dir ../city-heatmap-front/public/data`
+   — 6 files (paris/nyc/austin × food/fitness). Each is built by querying every
+   provider for that city+dataset and merging into one duplicate-free set; ~10 s
+   between rounds.
 4. If `public/data` changed, commit `chore(data): weekly refresh <date>` and
    push `main`; otherwise exit quietly (deterministic, timestamp-free output +
    per-dataset guards mean unchanged weeks produce no commit/redeploy).
 
 Boundaries are **not** in the weekly job (they rarely change) — refresh by hand:
-`python3 -m data fetch-boundary <city> --out-dir ../city-heatmap-front/public/data`.
+`python3 -m fetcher fetch-boundary <city> --out-dir ../city-heatmap-front/public/data`.
 
-See [data/README.md](data/README.md) for the fetch package's commands, guards,
+See [fetcher/README.md](fetcher/README.md) for the fetch package's commands, guards,
 Overture/duckdb details, and front-end sync notes.
 
 ## One-time server setup
 
 1. **Clone both repos** as siblings under one parent.
-2. **Dependencies**: Python 3.11+, plus `duckdb` for the Overture fitness merge:
-   `pip3 install duckdb --user --break-system-packages`. If duckdb/S3 is
-   unavailable, switch the wrapper's fetch to `--no-overture` (OSM-only; the
-   drop guard is then skipped).
+2. **Dependencies & keys**: Python 3.11+, plus:
+   - `duckdb` for the Overture fitness provider:
+     `pip3 install duckdb --user --break-system-packages` (skip with `--no-overture`).
+   - `GEOAPIFY_KEY` for the Geoapify provider (food + fitness) — copy `.env.example`
+     to `.env` and fill it in (`.env` is gitignored), or export the var (skip with
+     `--no-geoapify`). Free key: https://myprojects.geoapify.com/.
+
+   Any provider whose dependency/key is missing is skipped with a warning; the run
+   still proceeds on the others as long as OSM (the backbone) returns data.
 3. **SSH deploy key** (so the worker can push the front-end repo):
    - `ssh-keygen -t ed25519 -f ~/.ssh/city-heatmap-front -C "city-heatmap data-bot"`
    - Add the **public** key to the `city-heatmap-front` GitHub repo →

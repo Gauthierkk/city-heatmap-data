@@ -4,3 +4,5 @@ logs/
 .refresh.lock/
 .venv/
 venv/
+# API keys / secrets — never commit
+.env
