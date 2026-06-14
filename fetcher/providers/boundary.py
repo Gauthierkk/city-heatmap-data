@@ -2,7 +2,7 @@
 
 Fetches a city's administrative boundary from OSM, simplifies it with
 Douglas-Peucker, validates the area, and writes a compact GeoJSON Feature
-to public/data/boundary-<city>.geojson.
+to data/boundaries/<city>/boundary.geojson.
 
 Primary source: polygons.openstreetmap.fr (fast pre-built polygons).
 Fallback: Overpass API (assembles the relation from member ways).

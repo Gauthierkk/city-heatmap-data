@@ -20,13 +20,17 @@ from .providers import PROVIDER_NAMES, providers_for
 from .providers.overpass import DATASETS, dataset_by_id
 from .providers.boundary import fetch_boundary
 from .transform.aggregate import aggregate
+from .transform.clip import clip_to_geometry, load_boundary_geometry
 from .transform.geojson_io import check_guard, print_counts, write_geojson
 
 
-# Default output dir: a local data/ folder at the repo root. Resolved to an
-# absolute path so the write target is unambiguous regardless of the process's
+# Default output dirs: local folders under data/ at the repo root. Resolved to
+# absolute paths so the write target is unambiguous regardless of the process's
 # working directory. Layout from this file: fetcher/cli.py → fetcher/ → <repo root>/data .
-_DATA_DIR = Path(__file__).resolve().parent.parent / 'data'
+# Stores go to data/places/, city boundaries to data/boundaries/.
+_DATA_ROOT = Path(__file__).resolve().parent.parent / 'data'
+_DATA_DIR = _DATA_ROOT / 'places'
+_BOUNDARY_DIR = _DATA_ROOT / 'boundaries'
 
 # Drop guard: refuse to write if the new aggregated total is below this fraction
 # of the committed file's feature count (protects against a silent provider outage).
@@ -92,9 +96,27 @@ def _fetch_stores_one(
     # Fitness types (gym/yoga/...) are alternate labels for one venue, so match
     # across types there; food types are distinct categories, so require same type.
     final_geojson = aggregate(collections, cross_type=(dataset_id == 'fitness'))
+
+    # Clip to the city's boundary polygon. Only OSM restricts its query to the
+    # admin area server-side; Geoapify (its own city boundary) and Overture (bbox)
+    # leak places outside the zone the front end draws. This is the single
+    # source-agnostic gate that keeps every provider inside the clip zone.
+    boundary_geom = load_boundary_geometry(_BOUNDARY_DIR, city_id)
+    if boundary_geom is not None:
+        before = len(final_geojson['features'])
+        final_geojson = clip_to_geometry(final_geojson, boundary_geom)
+        dropped = before - len(final_geojson['features'])
+        print(f'  clipped to boundary: dropped {dropped} of {before} features outside {city_id}')
+    else:
+        print(
+            f'Warning: no boundary at {_BOUNDARY_DIR / city_id / "boundary.geojson"}; '
+            f'skipping clip for {city_id}. Run `make boundary {city_id}` first.',
+            file=sys.stderr,
+        )
+
     check_guard(final_geojson, city_id, dataset_id, dataset['min_features'])
 
-    # Nested layout: <out-dir>/<city>/<dataset>.geojson  (e.g. data/paris/food.geojson)
+    # Nested layout: <out-dir>/<city>/<dataset>.geojson  (e.g. data/places/paris/food.geojson)
     out_file = out_dir / city_id / f'{dataset_id}.geojson'
     out_file.parent.mkdir(parents=True, exist_ok=True)
 
@@ -142,11 +164,11 @@ def cmd_fetch_stores(args: argparse.Namespace) -> None:
 def cmd_fetch_boundary(args: argparse.Namespace) -> None:
     city_id = args.city or 'paris'
     city = city_by_id(city_id)
-    out_dir = Path(args.out_dir).resolve() if args.out_dir else _DATA_DIR
+    out_dir = Path(args.out_dir).resolve() if args.out_dir else _BOUNDARY_DIR
 
     feature = fetch_boundary(city)
 
-    # Nested layout: <out-dir>/<city>/boundary.geojson  (e.g. data/paris/boundary.geojson)
+    # Nested layout: <out-dir>/<city>/boundary.geojson  (e.g. data/boundaries/paris/boundary.geojson)
     out_file = out_dir / city_id / 'boundary.geojson'
     out_file.parent.mkdir(parents=True, exist_ok=True)
     write_geojson(feature, str(out_file))
@@ -224,7 +246,7 @@ def build_parser() -> argparse.ArgumentParser:
         '--out-dir',
         default=None,
         metavar='DIR',
-        help='Write GeoJSON file here instead of the default data/ folder',
+        help='Write GeoJSON file here instead of the default data/boundaries/ folder',
     )
 
     return parser

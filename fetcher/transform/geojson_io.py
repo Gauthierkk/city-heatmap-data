@@ -58,6 +58,17 @@ def make_feature(
     }
 
 
+def is_named(feature: dict[str, Any]) -> bool:
+    """True if a feature has a non-empty name. Unnamed places are dropped everywhere."""
+    return bool((feature['properties'].get('name') or '').strip())
+
+
+def drop_unnamed(geojson: dict[str, Any]) -> tuple[dict[str, Any], int]:
+    """Remove features with no name. Returns (filtered collection, count removed)."""
+    kept = [f for f in geojson['features'] if is_named(f)]
+    return {'type': 'FeatureCollection', 'features': kept}, len(geojson['features']) - len(kept)
+
+
 def check_guard(geojson: dict[str, Any], city_id: str, dataset_id: str, min_features: int) -> None:
     """Raise SystemExit(1) if the feature count is below the guard threshold."""
     n = len(geojson['features'])

@@ -27,6 +27,8 @@ import re
 import unicodedata
 from typing import Any
 
+from .geojson_io import is_named
+
 # Max distance (m) for two features to be considered the same place.
 DEFAULT_RADIUS_M = 100.0
 
@@ -173,6 +175,13 @@ def aggregate(
     for fc in collections:
         all_features.extend(fc.get('features') or [])
 
+    # Drop unnamed places from every source up front. They never merge with
+    # anything (an unnamed feature always forms its own singleton cluster), and
+    # an entry with no name isn't useful to show — so remove them outright.
+    incoming = len(all_features)
+    all_features = [f for f in all_features if is_named(f)]
+    dropped_unnamed = incoming - len(all_features)
+
     # Sort by id up front so clustering is independent of provider order and of
     # each provider's (not-guaranteed-stable) internal ordering — otherwise a
     # reshuffle from Overpass/Geoapify could churn the committed file week to week.
@@ -216,7 +225,8 @@ def aggregate(
     merged.sort(key=lambda f: f['properties']['id'])
 
     dupes = len(all_features) - len(merged)
-    print(f'Aggregated {len(all_features)} features from {len(collections)} source(s) '
-          f'→ {len(merged)} unique ({dupes} duplicate(s) merged)')
+    print(f'Aggregated {len(all_features)} named features from {len(collections)} source(s) '
+          f'→ {len(merged)} unique ({dupes} duplicate(s) merged, '
+          f'{dropped_unnamed} unnamed dropped)')
 
     return {'type': 'FeatureCollection', 'features': merged}
