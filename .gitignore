@@ -1,6 +1,7 @@
 __pycache__/
 *.pyc
 logs/
+data/
 .refresh.lock/
 .venv/
 venv/

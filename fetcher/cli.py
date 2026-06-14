@@ -23,11 +23,10 @@ from .transform.aggregate import aggregate
 from .transform.geojson_io import check_guard, print_counts, write_geojson
 
 
-# Default output dir: the sibling front-end repo's public/data/. Standard layout
-# is  <parent>/city-heatmap-data/  and  <parent>/city-heatmap-front/ , so from this
-# file:  fetcher/ → city-heatmap-data/ → <parent>/ → city-heatmap-front/public/data .
-# The weekly-refresh wrapper always passes --out-dir explicitly; this is the fallback.
-_PUBLIC_DATA = Path(__file__).parent.parent.parent / 'city-heatmap-front' / 'public' / 'data'
+# Default output dir: a local data/ folder at the repo root. Resolved to an
+# absolute path so the write target is unambiguous regardless of the process's
+# working directory. Layout from this file: fetcher/cli.py → fetcher/ → <repo root>/data .
+_DATA_DIR = Path(__file__).resolve().parent.parent / 'data'
 
 # Drop guard: refuse to write if the new aggregated total is below this fraction
 # of the committed file's feature count (protects against a silent provider outage).
@@ -95,7 +94,7 @@ def _fetch_stores_one(
     final_geojson = aggregate(collections, cross_type=(dataset_id == 'fitness'))
     check_guard(final_geojson, city_id, dataset_id, dataset['min_features'])
 
-    # Nested layout: public/data/<city>/<dataset>.geojson  (e.g. paris/food.geojson)
+    # Nested layout: <out-dir>/<city>/<dataset>.geojson  (e.g. data/paris/food.geojson)
     out_file = out_dir / city_id / f'{dataset_id}.geojson'
     out_file.parent.mkdir(parents=True, exist_ok=True)
 
@@ -105,7 +104,7 @@ def _fetch_stores_one(
 
 
 def cmd_fetch_stores(args: argparse.Namespace) -> None:
-    out_dir = Path(args.out_dir) if args.out_dir else _PUBLIC_DATA
+    out_dir = Path(args.out_dir).resolve() if args.out_dir else _DATA_DIR
 
     # Provider selection: --providers is an allowlist; --no-overture / --no-geoapify
     # are convenience deny flags layered on top.
@@ -143,11 +142,11 @@ def cmd_fetch_stores(args: argparse.Namespace) -> None:
 def cmd_fetch_boundary(args: argparse.Namespace) -> None:
     city_id = args.city or 'paris'
     city = city_by_id(city_id)
-    out_dir = Path(args.out_dir) if args.out_dir else _PUBLIC_DATA
+    out_dir = Path(args.out_dir).resolve() if args.out_dir else _DATA_DIR
 
     feature = fetch_boundary(city)
 
-    # Nested layout: public/data/<city>/boundary.geojson
+    # Nested layout: <out-dir>/<city>/boundary.geojson  (e.g. data/paris/boundary.geojson)
     out_file = out_dir / city_id / 'boundary.geojson'
     out_file.parent.mkdir(parents=True, exist_ok=True)
     write_geojson(feature, str(out_file))
@@ -186,7 +185,7 @@ def build_parser() -> argparse.ArgumentParser:
         '--out-dir',
         default=None,
         metavar='DIR',
-        help='Write GeoJSON files here instead of public/data/',
+        help='Write GeoJSON files here instead of the default data/ folder',
     )
     p_stores.add_argument(
         '--providers',
@@ -225,7 +224,7 @@ def build_parser() -> argparse.ArgumentParser:
         '--out-dir',
         default=None,
         metavar='DIR',
-        help='Write GeoJSON file here instead of public/data/',
+        help='Write GeoJSON file here instead of the default data/ folder',
     )
 
     return parser
