@@ -17,11 +17,12 @@ from ..cities import CityDef
 from .overpass import fetch_osm
 from .overture import fetch_overture
 from .geoapify import fetch_geoapify
+from .sirene import fetch_sirene
 
 
 @dataclass(frozen=True)
 class Provider:
-    name: str                                   # 'osm' | 'overture' | 'geoapify'
+    name: str                                   # 'osm' | 'overture' | 'geoapify' | 'sirene'
     datasets: frozenset[str]                    # which datasets it can serve
     fetch: Callable[[CityDef, str], dict[str, Any]]
 
@@ -30,6 +31,8 @@ ALL_PROVIDERS: list[Provider] = [
     Provider('osm', frozenset({'food', 'fitness'}), fetch_osm),
     Provider('overture', frozenset({'fitness'}), fetch_overture),
     Provider('geoapify', frozenset({'food', 'fitness'}), fetch_geoapify),
+    # France-only: serves Paris, empty elsewhere (gated inside fetch_sirene).
+    Provider('sirene', frozenset({'food', 'fitness'}), fetch_sirene),
 ]
 
 PROVIDER_NAMES: list[str] = [p.name for p in ALL_PROVIDERS]

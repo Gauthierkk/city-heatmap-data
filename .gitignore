@@ -5,5 +5,7 @@ data/
 .refresh.lock/
 .venv/
 venv/
+# uv editable-install build artifact
+*.egg-info/
 # API keys / secrets — never commit
 .env

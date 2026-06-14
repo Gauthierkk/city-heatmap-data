@@ -142,6 +142,8 @@ def cmd_fetch_stores(args: argparse.Namespace) -> None:
         deny.add('overture')
     if getattr(args, 'no_geoapify', False):
         deny.add('geoapify')
+    if getattr(args, 'no_sirene', False):
+        deny.add('sirene')
 
     if args.all:
         # All cities × datasets with a polite ~10 s sleep between provider rounds
@@ -229,6 +231,12 @@ def build_parser() -> argparse.ArgumentParser:
         action='store_true',
         default=False,
         help='Skip the Geoapify provider (e.g. when the API key is unset or over quota).',
+    )
+    p_stores.add_argument(
+        '--no-sirene',
+        action='store_true',
+        default=False,
+        help='Skip the SIRENE provider (Paris-only food/fitness enrichment from data.gouv).',
     )
 
     # --- fetch-boundary ---
