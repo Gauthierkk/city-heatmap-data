@@ -1,6 +1,16 @@
 """Geoapify Places API provider (food + fitness).
 
-GET https://api.geoapify.com/v2/places?categories=...&filter=rect:...&limit=500&apiKey=...
+Fetches every place inside a city's administrative boundary exactly once:
+
+  1. Resolve the city to a Geoapify boundary via the Geocoding API
+     (type=city) -> place_id.
+  2. Page the Places API with filter=place:<place_id>, all mapped categories in
+     a single query, walking offset by _LIMIT until a short page ends it.
+
+This replaces the old recursive rect quad-tiling, which re-queried overlapping
+tiles and paid for (then discarded) every 500-result parent page. Boundary +
+offset paging fetches each place once: credits = places / 20 (the floor), and
+the API clips to the city polygon server-side so no local filtering is needed.
 
 Coverage notes (from Geoapify's live category taxonomy):
   - Food: rich — commercial.supermarket / convenience and the
@@ -10,13 +20,9 @@ Coverage notes (from Geoapify's live category taxonomy):
     categories, so Geoapify mainly adds gyms + dojos. sport.fitness.fitness_station
     is OUTDOOR equipment and is excluded.
 
-Completeness without guessing page counts: recursive quad-tiling. We query a
-rectangle; if it returns the 500-result cap, we split it into four and recurse;
-otherwise we keep the page. Stays well inside the free plan (3000 credits/day,
-1 credit / 20 places).
-
-The API key comes from config.get_geoapify_key(); if unset the provider yields an
-empty collection with a warning so the rest of the pipeline still runs.
+The API key comes from config.get_geoapify_key(); if unset (or the city can't be
+resolved to a boundary) the provider yields an empty collection with a warning so
+the rest of the pipeline still runs.
 
 Unnamed places are skipped: we can't dedup them against named OSM/Overture
 records, so including them would risk the very duplicates we're trying to avoid.
@@ -35,9 +41,10 @@ from .. import config
 from ..cities import CityDef
 from ..transform.geojson_io import make_feature
 
-_ENDPOINT = 'https://api.geoapify.com/v2/places'
-_LIMIT = 500            # Geoapify per-request maximum
-_MAX_DEPTH = 6          # quad-tiling recursion guard (4^6 = 4096 leaf tiles max)
+_PLACES_ENDPOINT = 'https://api.geoapify.com/v2/places'
+_GEOCODE_ENDPOINT = 'https://api.geoapify.com/v1/geocode/search'
+_LIMIT = 500            # Geoapify per-request (and per-page) maximum
+_MAX_PAGES = 200        # pagination guard: 200 * 500 = 100k places; no city is close
 _TIMEOUT = 60
 _USER_AGENT = 'city-heatmap-data/0.1 (weekly data refresh worker)'
 
@@ -90,23 +97,19 @@ def _classify(categories: list[str]) -> str | None:
     return None
 
 
-def _request(categories: str, rect: tuple[float, float, float, float], key: str) -> list[dict[str, Any]]:
-    """One Places API call for a rectangle; returns the raw feature list."""
-    params = {
-        'categories': categories,
-        'filter': f'rect:{rect[0]},{rect[1]},{rect[2]},{rect[3]}',
-        'limit': str(_LIMIT),
-        'apiKey': key,
-    }
-    url = f'{_ENDPOINT}?{urllib.parse.urlencode(params)}'
+_place_id_cache: dict[str, str | None] = {}
+
+
+def _get(url: str) -> dict[str, Any]:
+    """GET a Geoapify endpoint and return parsed JSON, retrying transient errors."""
     req = urllib.request.Request(url, headers={'User-Agent': _USER_AGENT})
     last_error: Exception | None = None
-    for attempt in range(3):
+    for _ in range(3):
         try:
             with urllib.request.urlopen(req, timeout=_TIMEOUT) as resp:
-                return json.loads(resp.read()).get('features', [])
+                return json.loads(resp.read())
         except urllib.error.HTTPError as exc:
-            # 4xx (bad category etc.) won't fix itself — fail fast.
+            # 4xx (bad category, bad key etc.) won't fix itself — fail fast.
             if 400 <= exc.code < 500:
                 raise RuntimeError(f'Geoapify {exc.code}: {exc.read().decode()[:200]}') from None
             last_error = exc
@@ -115,31 +118,40 @@ def _request(categories: str, rect: tuple[float, float, float, float], key: str)
     raise RuntimeError(f'Geoapify request failed after retries: {last_error}')
 
 
-def _fetch_rect(
-    categories: str,
-    rect: tuple[float, float, float, float],
-    key: str,
-    depth: int,
-    out: dict[str, dict[str, Any]],
-) -> None:
-    """Recursively fetch a rectangle, quad-splitting when it hits the cap."""
-    feats = _request(categories, rect, key)
-    if len(feats) >= _LIMIT and depth < _MAX_DEPTH:
-        min_lon, min_lat, max_lon, max_lat = rect
-        mid_lon = (min_lon + max_lon) / 2
-        mid_lat = (min_lat + max_lat) / 2
-        for sub in (
-            (min_lon, min_lat, mid_lon, mid_lat),
-            (mid_lon, min_lat, max_lon, mid_lat),
-            (min_lon, mid_lat, mid_lon, max_lat),
-            (mid_lon, mid_lat, max_lon, max_lat),
-        ):
-            _fetch_rect(categories, sub, key, depth + 1, out)
-        return
-    for f in feats:
-        pid = f['properties'].get('place_id')
-        if pid and pid not in out:
-            out[pid] = f
+def _resolve_place_id(query: str, key: str) -> str | None:
+    """Geocode a city name to its Geoapify boundary place_id (cached per run)."""
+    if query in _place_id_cache:
+        return _place_id_cache[query]
+    params = {'text': query, 'type': 'city', 'format': 'json', 'limit': '1', 'apiKey': key}
+    results = _get(f'{_GEOCODE_ENDPOINT}?{urllib.parse.urlencode(params)}').get('results', [])
+    place_id = results[0].get('place_id') if results else None
+    _place_id_cache[query] = place_id
+    return place_id
+
+
+def _fetch_boundary(categories: str, place_id: str, key: str) -> dict[str, dict[str, Any]]:
+    """Page the Places API over a city boundary; each place is returned once."""
+    out: dict[str, dict[str, Any]] = {}
+    offset = 0
+    for _ in range(_MAX_PAGES):
+        params = {
+            'categories': categories,
+            'filter': f'place:{place_id}',
+            'limit': str(_LIMIT),
+            'offset': str(offset),
+            'apiKey': key,
+        }
+        feats = _get(f'{_PLACES_ENDPOINT}?{urllib.parse.urlencode(params)}').get('features', [])
+        for f in feats:
+            pid = f['properties'].get('place_id')
+            if pid and pid not in out:
+                out[pid] = f
+        if len(feats) < _LIMIT:
+            return out
+        offset += _LIMIT
+    print(f'  geoapify: WARNING hit pagination guard ({_MAX_PAGES} pages) — '
+          'results may be truncated.', file=sys.stderr)
+    return out
 
 
 def fetch_geoapify(city: CityDef, dataset_id: str) -> dict[str, Any]:
@@ -153,9 +165,15 @@ def fetch_geoapify(city: CityDef, dataset_id: str) -> dict[str, Any]:
     if not categories:
         return {'type': 'FeatureCollection', 'features': []}
 
-    print(f'Querying Geoapify — {city.id}/{dataset_id} ...')
-    raw: dict[str, dict[str, Any]] = {}
-    _fetch_rect(','.join(categories), city.bbox, key, 0, raw)
+    query = city.geoapify_query or city.name
+    place_id = _resolve_place_id(query, key)
+    if not place_id:
+        print(f'  geoapify: could not resolve boundary for {query!r} — '
+              f'skipping {city.id}/{dataset_id}.', file=sys.stderr)
+        return {'type': 'FeatureCollection', 'features': []}
+
+    print(f'Querying Geoapify — {city.id}/{dataset_id} (place:{place_id[:12]}…) ...')
+    raw = _fetch_boundary(','.join(categories), place_id, key)
 
     features: list[dict[str, Any]] = []
     for pid, f in raw.items():

@@ -17,7 +17,7 @@ class CityDef:
     relation: int          # primary OSM admin relation id
     timeout: int           # Overpass timeout in seconds (stores queries)
     # Bounding box (minLon, minLat, maxLon, maxLat); mirrors src/cities.ts bbox.
-    # Used by bbox-based providers (Overture, Geoapify).
+    # Used by bbox-based providers (Overture).
     bbox: tuple[float, float, float, float]
     # Per-city tolerance for Douglas-Peucker boundary simplification (degrees)
     tolerance_deg: float
@@ -26,6 +26,10 @@ class CityDef:
     # Optional list of per-borough relation ids to assemble when the primary
     # city relation is unavailable (currently only NYC)
     fallback_relations: tuple[int, ...] = field(default_factory=tuple)
+    # Geocoding query used to resolve this city's Geoapify boundary (place_id),
+    # which the Geoapify provider uses as `filter=place:...`. Disambiguate fully
+    # (e.g. include state/country). Falls back to `name` when empty.
+    geoapify_query: str = ''
 
 
 CITIES: dict[str, CityDef] = {
@@ -40,6 +44,7 @@ CITIES: dict[str, CityDef] = {
         tolerance_deg=0.00015,
         # ~105 km² (intra-muros incl. both bois)
         area_range=(90.0, 120.0),
+        geoapify_query='Paris, France',
     ),
     'nyc': CityDef(
         id='nyc',
@@ -55,6 +60,7 @@ CITIES: dict[str, CityDef] = {
         area_range=(700.0, 1300.0),
         # If the big city relation is unavailable, assemble the five boroughs
         fallback_relations=(2552485, 369518, 369519, 2552450, 962876),
+        geoapify_query='New York City, New York, USA',
     ),
     'austin': CityDef(
         id='austin',
@@ -68,6 +74,7 @@ CITIES: dict[str, CityDef] = {
         # ~704 km² land (2020 census); the OSM polygon has ~56 inner holes
         # (unincorporated enclaves) which area_km2() subtracts
         area_range=(600.0, 1000.0),
+        geoapify_query='Austin, Texas, USA',
     ),
 }
 
