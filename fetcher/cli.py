@@ -4,6 +4,7 @@ Commands:
   fetch-stores [city] [dataset]   — refresh store data from Overpass (+ Overture for fitness)
   fetch-boundary [city]           — refresh city admin boundary from OSM
   fetch-trees [city]              — refresh the Paris street-tree layer (Paris-only)
+  fetch-transit [city]            — refresh the Paris transit-station layer (Paris-only)
 
 Defaults: paris, food
 """
@@ -21,6 +22,7 @@ from .providers import PROVIDER_NAMES, providers_for
 from .providers.overpass import DATASETS, dataset_by_id
 from .providers.boundary import fetch_boundary
 from .providers.trees import fetch_trees
+from .providers.transit import fetch_transit
 from .transform.aggregate import aggregate
 from .transform.clip import clip_to_geometry, load_boundary_geometry, point_in_geometry
 from .transform.geojson_io import check_guard, print_counts, write_geojson
@@ -38,6 +40,9 @@ _BOUNDARY_DIR = _DATA_ROOT / 'boundaries'
 # partial/empty export. The raw dataset holds ~218k; clipping drops the Paris-owned
 # cemeteries outside the admin polygon, so this stays well below the live total.
 _TREES_MIN = 150_000
+
+# Minimum transit stations expected inside Paris (~297 live) — guards a partial fetch.
+_TRANSIT_MIN = 200
 
 # Drop guard: refuse to write if the new aggregated total is below this fraction
 # of the committed file's feature count (protects against a silent provider outage).
@@ -249,6 +254,54 @@ def cmd_fetch_trees(args: argparse.Namespace) -> None:
     write_geojson(geojson, str(out_file))
 
 
+def cmd_fetch_transit(args: argparse.Namespace) -> None:
+    """Fetch the Paris transit-station layer, clip to the boundary, and write it.
+
+    Separate from `fetch-stores`: a single authoritative source, one point per
+    station, a `categories` list per station (no merge, no OSM backbone). Reuses
+    the feature-based clip + guards since it is a normal FeatureCollection.
+    """
+    city_id = args.city or 'paris'
+    city = city_by_id(city_id)
+    # Lands alongside the store layers so the front end loads one folder per city.
+    out_dir = Path(args.out_dir).resolve() if args.out_dir else _DATA_DIR
+
+    fc = fetch_transit(city)
+
+    # Clip to the committed boundary — the source is region-wide (Île-de-France),
+    # so this keeps only the ~297 stations inside Paris intra-muros.
+    boundary_geom = load_boundary_geometry(_BOUNDARY_DIR, city_id)
+    if boundary_geom is not None:
+        before = len(fc['features'])
+        fc = clip_to_geometry(fc, boundary_geom)
+        print(f'  clipped to boundary: dropped {before - len(fc["features"])} of '
+              f'{before} stations outside {city_id}')
+    else:
+        print(
+            f'Warning: no boundary at {_BOUNDARY_DIR / city_id / "boundary.geojson"}; '
+            f'skipping clip for {city_id}. Run `make boundary {city_id}` first.',
+            file=sys.stderr,
+        )
+
+    check_guard(fc, city_id, 'transit', _TRANSIT_MIN)
+
+    out_file = out_dir / city_id / 'transit.geojson'
+    out_file.parent.mkdir(parents=True, exist_ok=True)
+
+    _check_drop_guard(fc, out_file, city_id, 'transit')
+
+    # Per-category station count (a multimodal station counts in each category).
+    counts: dict[str, int] = {}
+    for f in fc['features']:
+        for c in f['properties']['categories']:
+            counts[c] = counts.get(c, 0) + 1
+    print(f'Fetched {len(fc["features"])} transit stations for {city_id}/transit:')
+    for c, cnt in sorted(counts.items(), key=lambda x: -x[1]):
+        print(f'  {c:<14} {cnt}')
+
+    write_geojson(fc, str(out_file))
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog='python3 -m fetcher',
@@ -348,6 +401,24 @@ def build_parser() -> argparse.ArgumentParser:
         help='Write GeoJSON file here instead of the default data/places/ folder',
     )
 
+    # --- fetch-transit ---
+    p_transit = sub.add_parser(
+        'fetch-transit',
+        help='Refresh the Paris public-transit station layer from IDF Mobilités (Paris-only)',
+    )
+    p_transit.add_argument(
+        'city',
+        nargs='?',
+        default=None,
+        help='City id (default: paris). Only paris has a transit dataset wired up.',
+    )
+    p_transit.add_argument(
+        '--out-dir',
+        default=None,
+        metavar='DIR',
+        help='Write GeoJSON file here instead of the default data/places/ folder',
+    )
+
     return parser
 
 
@@ -362,6 +433,8 @@ def main(argv: list[str] | None = None) -> None:
             cmd_fetch_boundary(args)
         elif args.command == 'fetch-trees':
             cmd_fetch_trees(args)
+        elif args.command == 'fetch-transit':
+            cmd_fetch_transit(args)
         else:
             parser.print_help()
             sys.exit(1)

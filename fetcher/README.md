@@ -64,6 +64,34 @@ polygon), guarded against a partial fetch (`< 150k` trees ⇒ refuse), and writt
 to `<city>/trees.geojson` (~192k points at 5 dp precision, ~3.4 MB). **Paris-only**
 — every other city returns an empty MultiPoint.
 
+## Public transit (separate pipeline)
+
+The Paris **public-transit** station layer is another separate, Paris-only
+pipeline (`fetch-transit`, `providers/transit.py`). Source: IDF Mobilités'
+[`emplacement-des-gares-idf`](https://www.data.gouv.fr/datasets/gares-et-stations-du-reseau-ferre-dile-de-france-par-ligne)
+on the same Opendatasoft API as the trees layer.
+
+The source lists one row per **station × line** (~1240 region-wide); the provider
+collapses these to **one point per physical station** — grouped by station name
+within an 800 m radius (so a split hub like Gare du Nord's metro/RER zones unify,
+but the two distant "Malesherbes" stay separate), positioned at the mean
+coordinate. The result is clipped to the Paris boundary (~297 stations).
+
+Each station carries a **list** of categories (no address):
+
+```jsonc
+"properties": {
+  "id": "transit/73626",
+  "name": "Gare de Lyon",
+  "categories": ["major_station", "metro", "rer", "train"]
+}
+```
+
+`categories` holds the station's modes (`metro`, `rer`, `train`, `tram`, `val`,
+`cable`); the six Paris mainline terminals (Nord, Est, Lyon, Austerlitz,
+Montparnasse, Saint-Lazare — Bercy excluded) also get `major_station`. A guard
+refuses to write below 200 stations.
+
 ## Requirements
 
 - **Python 3.11+** (tested on 3.14). Stdlib only for the OSM provider.
@@ -107,6 +135,10 @@ python3 -m fetcher fetch-boundary austin
 python3 -m fetcher fetch-trees
 python3 -m fetcher fetch-trees paris --out-dir ../city-heatmap-front/public/data
 
+# Fetch the Paris public-transit station layer (Paris-only, separate pipeline)
+python3 -m fetcher fetch-transit
+python3 -m fetcher fetch-transit paris --out-dir ../city-heatmap-front/public/data
+
 # Write to an explicit out-dir (the weekly wrapper passes the front-end repo)
 python3 -m fetcher fetch-stores --all --out-dir ../city-heatmap-front/public/data
 python3 -m fetcher fetch-stores nyc fitness --out-dir /tmp/out
@@ -122,6 +154,7 @@ Nested per city — `<out-dir>/<city>/<name>.geojson`:
 | `fetch-stores <city> fitness` | `<city>/fitness.geojson` |
 | `fetch-boundary <city>` | `<city>/boundary.geojson` |
 | `fetch-trees paris` | `<city>/trees.geojson` (MultiPoint, Paris-only) |
+| `fetch-transit paris` | `<city>/transit.geojson` (FeatureCollection, Paris-only) |
 
 ### Guards
 
@@ -143,11 +176,12 @@ python3 -m fetcher fetch-boundary nyc    --out-dir ../city-heatmap-front/public/
 python3 -m fetcher fetch-boundary austin --out-dir ../city-heatmap-front/public/data
 ```
 
-The **trees** layer is likewise excluded from the weekly job (it changes slowly
-and is Paris-only) — refresh by hand when needed:
+The **trees** and **transit** layers are likewise excluded from the weekly job
+(they change slowly and are Paris-only) — refresh by hand when needed:
 
 ```bash
-python3 -m fetcher fetch-trees paris --out-dir ../city-heatmap-front/public/data
+python3 -m fetcher fetch-trees   paris --out-dir ../city-heatmap-front/public/data
+python3 -m fetcher fetch-transit paris --out-dir ../city-heatmap-front/public/data
 ```
 
 ## Sync notes

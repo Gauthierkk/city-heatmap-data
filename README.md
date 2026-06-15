@@ -38,10 +38,12 @@ so the data must live in the front-end repo — this worker only *generates* it.
 Boundaries are **not** in the weekly job (they rarely change) — refresh by hand:
 `python3 -m fetcher fetch-boundary <city> --out-dir ../city-heatmap-front/public/data`.
 
-The Paris **street-tree** density layer is a separate, Paris-only pipeline (its
-own `fetch-trees` command; a GeoJSON MultiPoint, not the store schema) and is also
-excluded from the weekly job — refresh by hand:
-`python3 -m fetcher fetch-trees paris --out-dir ../city-heatmap-front/public/data`.
+Two Paris-only extra layers run as separate pipelines and are also excluded from
+the weekly job — refresh by hand:
+- **street trees** (`fetch-trees`; a GeoJSON MultiPoint, not the store schema):
+  `python3 -m fetcher fetch-trees paris --out-dir ../city-heatmap-front/public/data`.
+- **public transit** (`fetch-transit`; stations with a `categories` list):
+  `python3 -m fetcher fetch-transit paris --out-dir ../city-heatmap-front/public/data`.
 
 See [fetcher/README.md](fetcher/README.md) for the fetch package's commands, guards,
 Overture/duckdb details, and front-end sync notes.

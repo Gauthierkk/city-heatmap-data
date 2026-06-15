@@ -8,7 +8,8 @@
 #   make load all fitness         # all cities x fitness
 #
 # When the category is left as `all` and paris is in scope, `load` also pulls the
-# Paris street-tree layer (its own separate pipeline). `make trees` runs it alone.
+# Paris-only extra layers (street trees + public transit, each its own separate
+# pipeline). `make trees` / `make transit` run them alone.
 #
 #   make boundary                 # all city boundaries
 #   make boundary austin          # one city boundary
@@ -73,6 +74,8 @@ load:
 	if [ "$$cat" = all ] && { [ "$$city" = all ] || [ "$$city" = paris ]; }; then \
 	  echo '--- paris/trees ---'; \
 	  $(FETCH) fetch-trees paris || exit $$?; \
+	  echo '--- paris/transit ---'; \
+	  $(FETCH) fetch-transit paris || exit $$?; \
 	fi
 
 ## boundary: fetch <city|all> admin boundary (default all)
@@ -87,6 +90,10 @@ boundary:
 ## trees: fetch the Paris street-tree density layer (paris-only, separate pipeline)
 trees:
 	$(FETCH) fetch-trees paris
+
+## transit: fetch the Paris public-transit station layer (paris-only, separate pipeline)
+transit:
+	$(FETCH) fetch-transit paris
 
 ## clean-bounds: drop already-committed places outside their city polygon (no network)
 clean-bounds:
@@ -107,8 +114,9 @@ help:
 	@echo '  make boundary                 all city boundaries'
 	@echo '  make boundary <city>          one city boundary'
 	@echo ''
-	@echo 'Trees (paris-only, separate density layer):'
+	@echo 'Paris-only extra layers (separate pipelines, also pulled by `make load paris`):'
 	@echo '  make trees                    fetch the Paris street-tree layer'
+	@echo '  make transit                  fetch the Paris public-transit station layer'
 	@echo ''
 	@echo 'Maintenance:'
 	@echo '  make clean-bounds             drop committed places outside city polygons (no network)'
@@ -116,4 +124,4 @@ help:
 	@echo '  cities     : $(CITIES) (or all)'
 	@echo '  categories : $(DATASETS) (or all)'
 
-.PHONY: help load boundary trees clean-bounds $(CITIES) $(DATASETS) all
+.PHONY: help load boundary trees transit clean-bounds $(CITIES) $(DATASETS) all
