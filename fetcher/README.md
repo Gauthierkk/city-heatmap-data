@@ -40,6 +40,30 @@ provider. Provenance is **not** recorded in the output.
 `name` and `address` may be `null`; `address` holds only the populated subset of
 `{housenumber, street, postcode, city}`.
 
+## Trees (separate pipeline)
+
+The Paris **street-tree** layer is intentionally **separate** from the places
+pipeline above — trees are not businesses, so none of the providers/merge/OSM
+machinery applies (nothing to dedup, distinct trees aren't "duplicates", and
+[opendata.paris.fr `les-arbres`](https://opendata.paris.fr/explore/dataset/les-arbres/)
+is the single authoritative source, ~218k trees). It has its own
+`fetch-trees` command and provider (`providers/trees.py`, **not** registered in
+`ALL_PROVIDERS`), and shares only the boundary clip + writer.
+
+Because a tree layer is pure point density, the output is **not** the feature
+schema above — it carries no per-feature properties, just coordinates, as a single
+GeoJSON **MultiPoint**:
+
+```jsonc
+{ "type": "MultiPoint", "coordinates": [[2.370495, 48.831389], /* ... */] }
+```
+
+The export is **clipped to the committed Paris boundary** (dropping the
+Paris-owned cemeteries — Pantin, Bagneux, Thiais — that sit outside the admin
+polygon), guarded against a partial fetch (`< 150k` trees ⇒ refuse), and written
+to `<city>/trees.geojson` (~192k points at 5 dp precision, ~3.4 MB). **Paris-only**
+— every other city returns an empty MultiPoint.
+
 ## Requirements
 
 - **Python 3.11+** (tested on 3.14). Stdlib only for the OSM provider.
@@ -79,6 +103,10 @@ python3 -m fetcher fetch-boundary
 python3 -m fetcher fetch-boundary nyc
 python3 -m fetcher fetch-boundary austin
 
+# Fetch the Paris street-tree density layer (Paris-only, separate pipeline)
+python3 -m fetcher fetch-trees
+python3 -m fetcher fetch-trees paris --out-dir ../city-heatmap-front/public/data
+
 # Write to an explicit out-dir (the weekly wrapper passes the front-end repo)
 python3 -m fetcher fetch-stores --all --out-dir ../city-heatmap-front/public/data
 python3 -m fetcher fetch-stores nyc fitness --out-dir /tmp/out
@@ -93,6 +121,7 @@ Nested per city — `<out-dir>/<city>/<name>.geojson`:
 | `fetch-stores <city> food` | `<city>/food.geojson` |
 | `fetch-stores <city> fitness` | `<city>/fitness.geojson` |
 | `fetch-boundary <city>` | `<city>/boundary.geojson` |
+| `fetch-trees paris` | `<city>/trees.geojson` (MultiPoint, Paris-only) |
 
 ### Guards
 
@@ -112,6 +141,13 @@ Boundaries are excluded from the weekly job — refresh them by hand when needed
 python3 -m fetcher fetch-boundary paris  --out-dir ../city-heatmap-front/public/data
 python3 -m fetcher fetch-boundary nyc    --out-dir ../city-heatmap-front/public/data
 python3 -m fetcher fetch-boundary austin --out-dir ../city-heatmap-front/public/data
+```
+
+The **trees** layer is likewise excluded from the weekly job (it changes slowly
+and is Paris-only) — refresh by hand when needed:
+
+```bash
+python3 -m fetcher fetch-trees paris --out-dir ../city-heatmap-front/public/data
 ```
 
 ## Sync notes

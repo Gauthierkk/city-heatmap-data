@@ -2,10 +2,13 @@
 #
 # Data always goes to the static data/ tree (data/places, data/boundaries).
 #
-#   make load                     # all cities x all categories
-#   make load paris               # paris  x all categories
-#   make load paris food          # paris  x food
+#   make load                     # all cities x all categories (+ paris trees)
+#   make load paris               # paris  x all categories (+ paris trees)
+#   make load paris food          # paris  x food (no trees — category given)
 #   make load all fitness         # all cities x fitness
+#
+# When the category is left as `all` and paris is in scope, `load` also pulls the
+# Paris street-tree layer (its own separate pipeline). `make trees` runs it alone.
 #
 #   make boundary                 # all city boundaries
 #   make boundary austin          # one city boundary
@@ -66,6 +69,10 @@ load:
 	    echo "--- $$c/$$d ---"; \
 	    $(FETCH) fetch-stores $$c $$d || exit $$?; \
 	  done; done; \
+	fi; \
+	if [ "$$cat" = all ] && { [ "$$city" = all ] || [ "$$city" = paris ]; }; then \
+	  echo '--- paris/trees ---'; \
+	  $(FETCH) fetch-trees paris || exit $$?; \
 	fi
 
 ## boundary: fetch <city|all> admin boundary (default all)
@@ -76,6 +83,10 @@ boundary:
 	  echo "--- boundary $$c ---"; \
 	  $(FETCH) fetch-boundary $$c || exit $$?; \
 	done
+
+## trees: fetch the Paris street-tree density layer (paris-only, separate pipeline)
+trees:
+	$(FETCH) fetch-trees paris
 
 ## clean-bounds: drop already-committed places outside their city polygon (no network)
 clean-bounds:
@@ -90,10 +101,14 @@ help:
 	@echo '  make load <city>              one city     x all categories'
 	@echo '  make load <city> <category>   one city     x one category'
 	@echo '  make load all <category>      all cities   x one category'
+	@echo '  (paris + all-categories also pulls the street-tree layer)'
 	@echo ''
 	@echo 'Boundaries — make boundary <city> (defaults to all):'
 	@echo '  make boundary                 all city boundaries'
 	@echo '  make boundary <city>          one city boundary'
+	@echo ''
+	@echo 'Trees (paris-only, separate density layer):'
+	@echo '  make trees                    fetch the Paris street-tree layer'
 	@echo ''
 	@echo 'Maintenance:'
 	@echo '  make clean-bounds             drop committed places outside city polygons (no network)'
@@ -101,4 +116,4 @@ help:
 	@echo '  cities     : $(CITIES) (or all)'
 	@echo '  categories : $(DATASETS) (or all)'
 
-.PHONY: help load boundary clean-bounds $(CITIES) $(DATASETS) all
+.PHONY: help load boundary trees clean-bounds $(CITIES) $(DATASETS) all
