@@ -6,28 +6,20 @@ duplicates, and OpenData Paris is the single authoritative source (~218k trees).
 So this provider does not feed the source-agnostic aggregator, is not registered
 in `ALL_PROVIDERS`, and is driven by its own `fetch-trees` CLI command.
 
-The output is a GeoJSON **FeatureCollection** of Point features. A heatmap layer
-reads a point FeatureCollection directly, and — unlike a bare MultiPoint — each
-point carries its own properties, so every coordinate is bound to its species
-("type"):
-
-    {
-      "type": "FeatureCollection",
-      "features": [
-        {
-          "type": "Feature",
-          "geometry": {"type": "Point", "coordinates": [lon, lat]},
-          "properties": {"species_fr": "Marronnier", "species_en": "Horse chestnut"}
-        },
-        ...
-      ]
-    }
+`fetch_trees` builds a GeoJSON **FeatureCollection** of Point features (the shape
+the boundary clip + guards operate on), each point carrying its species in French
+and English. Before writing, `to_columnar` collapses that to the compact
+**`trees-columnar-v1`** JSON object the front end actually ships — a species
+lookup table + parallel coordinate/index arrays (see `to_columnar`), ~5–7×
+smaller because the repeated species strings and per-feature GeoJSON boilerplate
+are gone. `trees-columnar-v1` is the documented contract with the front-end repo
+(see `fetcher/README.md`).
 
 `species_fr` is the dataset's `libellefrancais` (French common name, e.g.
 Marronnier, Platane, Tilleul); `species_en` is its English common name via
 `tree_species_en.english_name()`. A tree with no recorded species gets empty
 strings. Coordinates are kept to 5 dp (≈1.1 m) — a density layer needs no
-sub-metre precision and it trims the ~200k-feature file.
+sub-metre precision and it trims the ~200k-point file.
 
 PARIS-ONLY: returns an empty FeatureCollection for every other city (no equivalent
 source wired up yet), mirroring how the SIRENE provider gates on Paris.
@@ -110,3 +102,55 @@ def fetch_trees(city: CityDef) -> dict[str, Any]:
     print(f'  {len(en_cache)} distinct tree species for {city.id}', file=sys.stderr)
 
     return {'type': 'FeatureCollection', 'features': features}
+
+
+def to_columnar(fc: dict[str, Any]) -> dict[str, Any]:
+    """Convert a tree FeatureCollection to the compact `trees-columnar-v1` shape.
+
+    The species strings repeat on every one of ~192k features (e.g. "Plane tree"
+    ~39k times), so a FeatureCollection bloats to tens of MB and stalls the client
+    on `JSON.parse` + GPU upload. This drops the per-feature GeoJSON boilerplate by
+    going columnar and replaces the repeated strings with a deduplicated species
+    lookup table + integer index:
+
+        {
+          "format": "trees-columnar-v1",
+          "species": [{"fr": "Platane", "en": "Plane tree"}, ...],
+          "coordinates": [[lon, lat], ...],
+          "speciesIndex": [0, 1, ...]
+        }
+
+    `species` is sorted by frequency (index 0 = most common). Trees with no
+    recorded species share one real entry `{"fr": "", "en": ""}` — there is no
+    sentinel, every tree gets a valid index. `coordinates[i]` and
+    `speciesIndex[i]` are parallel (one entry per tree). Indices are only stable
+    within a single generated file; the front end reads them per file.
+    """
+    features = fc['features']
+
+    # Frequency per distinct (fr, en) species pair — empty strings form their own
+    # key, so unnamed trees collapse to a single real table entry.
+    counts: dict[tuple[str, str], int] = {}
+    for f in features:
+        props = f['properties']
+        key = (props['species_fr'], props['species_en'])
+        counts[key] = counts.get(key, 0) + 1
+
+    # Most frequent first; tie-break on the name pair for deterministic output.
+    ordered = sorted(counts, key=lambda k: (-counts[k], k))
+    index_of = {key: i for i, key in enumerate(ordered)}
+    species = [{'fr': fr, 'en': en} for fr, en in ordered]
+
+    coordinates: list[list[float]] = []
+    species_index: list[int] = []
+    for f in features:
+        coordinates.append(f['geometry']['coordinates'])
+        props = f['properties']
+        species_index.append(index_of[(props['species_fr'], props['species_en'])])
+
+    return {
+        'format': 'trees-columnar-v1',
+        'species': species,
+        'coordinates': coordinates,
+        'speciesIndex': species_index,
+    }

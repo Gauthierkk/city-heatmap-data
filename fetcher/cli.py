@@ -21,7 +21,7 @@ from .cities import CITIES, city_by_id
 from .providers import PROVIDER_NAMES, providers_for
 from .providers.overpass import DATASETS, dataset_by_id
 from .providers.boundary import fetch_boundary
-from .providers.trees import fetch_trees
+from .providers.trees import fetch_trees, to_columnar
 from .providers.transit import fetch_transit
 from .transform.aggregate import aggregate
 from .transform.clip import clip_to_geometry, load_boundary_geometry
@@ -55,11 +55,13 @@ def _check_drop_guard(merged_geojson: dict, out_file: Path, city_id: str, datase
         return  # no committed baseline — nothing to check
     try:
         existing = json.loads(out_file.read_text())
-        existing_count = len(existing.get('features', []))
+        # Trees ship as `trees-columnar-v1` (no `features`; one entry per
+        # coordinate); every other layer is a FeatureCollection.
+        existing_count = len(existing.get('features') or existing.get('coordinates') or [])
     except Exception:
         return  # can't read existing file — skip guard
 
-    new_count = len(merged_geojson.get('features', []))
+    new_count = len(merged_geojson.get('features') or merged_geojson.get('coordinates') or [])
     threshold = existing_count * _DROP_GUARD_FRACTION
     if new_count < threshold:
         print(
@@ -228,7 +230,10 @@ def cmd_fetch_trees(args: argparse.Namespace) -> None:
     _check_drop_guard(fc, out_file, city_id, 'trees')
 
     print(f'Fetched {len(fc["features"])} trees for {city_id}')
-    write_geojson(fc, str(out_file))
+    # Ship the compact `trees-columnar-v1` shape (species lookup table + parallel
+    # coordinate/index arrays), ~5–7× smaller than the FeatureCollection the
+    # clip + guards above operate on. See providers/trees.py:to_columnar.
+    write_geojson(to_columnar(fc), str(out_file))
 
 
 def cmd_fetch_transit(args: argparse.Namespace) -> None:

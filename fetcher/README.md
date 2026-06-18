@@ -50,36 +50,57 @@ is the single authoritative source, ~218k trees). It has its own
 `fetch-trees` command and provider (`providers/trees.py`, **not** registered in
 `ALL_PROVIDERS`), and shares only the boundary clip + writer.
 
-The output is a GeoJSON **FeatureCollection** of Point features — a heatmap layer
-reads it directly, and (unlike a bare MultiPoint) each point carries its own
-properties, so every coordinate is bound to its **species** ("type") in French
-and English:
+### Output format — `trees-columnar-v1` (contract with the front-end repo)
+
+Trees do **not** ship as a GeoJSON FeatureCollection. With ~192k points the
+species strings repeat on every feature (e.g. "Plane tree" ~39k times), so a
+FeatureCollection bloats to ~36 MB and stalls the client on `JSON.parse` + GPU
+upload. Instead `trees.geojson` is a plain JSON object — `trees-columnar-v1` —
+that replaces the repeated strings with a species lookup table + integer index
+and drops the per-feature GeoJSON boilerplate by going columnar (~5–7× smaller,
+~5 MB). The front end detects this shape (the top-level `format` field / absence
+of `type: "FeatureCollection"`) and reads it instead of the FeatureCollection
+path. **This format is the contract between the two repos** — changing it
+requires a matching front-end change.
 
 ```jsonc
 {
-  "type": "FeatureCollection",
-  "features": [
-    {
-      "type": "Feature",
-      "geometry": { "type": "Point", "coordinates": [2.370495, 48.831389] },
-      "properties": { "species_fr": "Plaqueminier", "species_en": "Persimmon" }
-    }
-    /* ... ~192k features, ~235 distinct species ... */
-  ]
+  "format": "trees-columnar-v1",
+  "species": [
+    { "fr": "Platane",    "en": "Plane tree" },      // index 0 = most frequent
+    { "fr": "Marronnier", "en": "Horse chestnut" },
+    { "fr": "",           "en": "" }                  // trees with no recorded species
+    /* ... ~235 distinct species ... */
+  ],
+  "coordinates":  [[2.37049, 48.83139], /* ... */],   // [lng, lat], 5 dp (~1 m)
+  "speciesIndex": [0, 1, /* ... */]                    // indexes into `species`
 }
 ```
 
-`species_fr` is the dataset's `libellefrancais` (French common name); `species_en`
-is its English common name via [`providers/tree_species_en.py`](providers/tree_species_en.py),
-a curated French→English map (each distinct name translated once, then cached).
-Names with no settled English form fall back to the French name; a tree with no
-recorded species gets empty strings.
+- `species` is the **deduplicated** lookup table, each entry keeping both the
+  French and English name, **sorted by frequency** (index 0 = most common).
+- `coordinates[i]` and `speciesIndex[i]` are **parallel** arrays of equal length
+  (one entry per tree); `speciesIndex[i]` indexes into `species`.
+- Trees with no recorded species (~3.4k) share **one real table entry**
+  `{ "fr": "", "en": "" }` — there is no sentinel; every tree has a valid index.
+- Indices are only **stable within a single generated file** — they may renumber
+  between regenerations, so the front end must read them per file.
+
+`species[*].fr` is the dataset's `libellefrancais` (French common name);
+`species[*].en` is its English common name via
+[`providers/tree_species_en.py`](providers/tree_species_en.py), a curated
+French→English map (each distinct name translated once, then cached). Names with
+no settled English form fall back to the French name.
+
+Internally `fetch_trees` builds a FeatureCollection (the shape the boundary clip +
+guards operate on) and `providers/trees.py:to_columnar` collapses it to
+`trees-columnar-v1` just before writing.
 
 The export is **clipped to the committed Paris boundary** (dropping the
 Paris-owned cemeteries — Pantin, Bagneux, Thiais — that sit outside the admin
 polygon), guarded against a partial fetch (`< 150k` trees ⇒ refuse), and written
-to `<city>/trees.geojson` (~192k points at 5 dp precision, ~26 MB raw / ~1.9 MB
-gzipped). **Paris-only** — every other city returns an empty FeatureCollection.
+to `<city>/trees.geojson` (~192k points at 5 dp precision). **Paris-only** —
+every other city emits an empty `trees-columnar-v1` object.
 
 ## Public transit (separate pipeline)
 
@@ -170,7 +191,7 @@ Nested per city — `<out-dir>/<city>/<name>.geojson`:
 | `fetch-stores <city> food` | `<city>/food.geojson` |
 | `fetch-stores <city> fitness` | `<city>/fitness.geojson` |
 | `fetch-boundary <city>` | `<city>/boundary.geojson` |
-| `fetch-trees paris` | `<city>/trees.geojson` (Point FeatureCollection w/ species, Paris-only) |
+| `fetch-trees paris` | `<city>/trees.geojson` (`trees-columnar-v1`: species table + parallel coord/index arrays, Paris-only) |
 | `fetch-transit paris` | `<city>/transit.geojson` (FeatureCollection, Paris-only) |
 
 ### Guards
