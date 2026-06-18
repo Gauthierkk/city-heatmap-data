@@ -50,19 +50,36 @@ is the single authoritative source, ~218k trees). It has its own
 `fetch-trees` command and provider (`providers/trees.py`, **not** registered in
 `ALL_PROVIDERS`), and shares only the boundary clip + writer.
 
-Because a tree layer is pure point density, the output is **not** the feature
-schema above — it carries no per-feature properties, just coordinates, as a single
-GeoJSON **MultiPoint**:
+The output is a GeoJSON **FeatureCollection** of Point features — a heatmap layer
+reads it directly, and (unlike a bare MultiPoint) each point carries its own
+properties, so every coordinate is bound to its **species** ("type") in French
+and English:
 
 ```jsonc
-{ "type": "MultiPoint", "coordinates": [[2.370495, 48.831389], /* ... */] }
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [2.370495, 48.831389] },
+      "properties": { "species_fr": "Plaqueminier", "species_en": "Persimmon" }
+    }
+    /* ... ~192k features, ~235 distinct species ... */
+  ]
+}
 ```
+
+`species_fr` is the dataset's `libellefrancais` (French common name); `species_en`
+is its English common name via [`providers/tree_species_en.py`](providers/tree_species_en.py),
+a curated French→English map (each distinct name translated once, then cached).
+Names with no settled English form fall back to the French name; a tree with no
+recorded species gets empty strings.
 
 The export is **clipped to the committed Paris boundary** (dropping the
 Paris-owned cemeteries — Pantin, Bagneux, Thiais — that sit outside the admin
 polygon), guarded against a partial fetch (`< 150k` trees ⇒ refuse), and written
-to `<city>/trees.geojson` (~192k points at 5 dp precision, ~3.4 MB). **Paris-only**
-— every other city returns an empty MultiPoint.
+to `<city>/trees.geojson` (~192k points at 5 dp precision, ~26 MB raw / ~1.9 MB
+gzipped). **Paris-only** — every other city returns an empty FeatureCollection.
 
 ## Public transit (separate pipeline)
 
@@ -153,7 +170,7 @@ Nested per city — `<out-dir>/<city>/<name>.geojson`:
 | `fetch-stores <city> food` | `<city>/food.geojson` |
 | `fetch-stores <city> fitness` | `<city>/fitness.geojson` |
 | `fetch-boundary <city>` | `<city>/boundary.geojson` |
-| `fetch-trees paris` | `<city>/trees.geojson` (MultiPoint, Paris-only) |
+| `fetch-trees paris` | `<city>/trees.geojson` (Point FeatureCollection w/ species, Paris-only) |
 | `fetch-transit paris` | `<city>/transit.geojson` (FeatureCollection, Paris-only) |
 
 ### Guards

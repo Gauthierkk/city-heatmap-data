@@ -24,7 +24,7 @@ from .providers.boundary import fetch_boundary
 from .providers.trees import fetch_trees
 from .providers.transit import fetch_transit
 from .transform.aggregate import aggregate
-from .transform.clip import clip_to_geometry, load_boundary_geometry, point_in_geometry
+from .transform.clip import clip_to_geometry, load_boundary_geometry
 from .transform.geojson_io import check_guard, print_counts, write_geojson
 
 
@@ -189,10 +189,12 @@ def cmd_fetch_boundary(args: argparse.Namespace) -> None:
 
 
 def cmd_fetch_trees(args: argparse.Namespace) -> None:
-    """Fetch the Paris tree layer, clip to the city boundary, and write a MultiPoint.
+    """Fetch the Paris tree layer, clip to the city boundary, and write it.
 
-    Separate from `fetch-stores`: no providers/aggregation/OSM backbone — a tree
-    layer is pure point density (one GeoJSON MultiPoint, no per-feature props).
+    Separate from `fetch-stores`: no providers/aggregation/OSM backbone — one
+    authoritative source, one Point feature per tree carrying its species in
+    French + English. Reuses the feature-based clip + guards since it is a normal
+    FeatureCollection.
     """
     city_id = args.city or 'paris'
     city = city_by_id(city_id)
@@ -200,19 +202,17 @@ def cmd_fetch_trees(args: argparse.Namespace) -> None:
     # front end loads every <city>/*.geojson from one folder.
     out_dir = Path(args.out_dir).resolve() if args.out_dir else _DATA_DIR
 
-    geojson = fetch_trees(city)
-    coords = geojson['coordinates']
+    fc = fetch_trees(city)
 
     # Clip to the committed boundary polygon — the export includes Paris-owned
     # cemeteries (Pantin, Bagneux, Thiais) that sit outside the admin area the
-    # front end draws. Operates directly on the coordinate list.
+    # front end draws.
     boundary_geom = load_boundary_geometry(_BOUNDARY_DIR, city_id)
     if boundary_geom is not None:
-        before = len(coords)
-        coords = [c for c in coords if point_in_geometry(c[0], c[1], boundary_geom)]
-        print(f'  clipped to boundary: dropped {before - len(coords)} of {before} '
-              f'trees outside {city_id}')
-        geojson = {'type': 'MultiPoint', 'coordinates': coords}
+        before = len(fc['features'])
+        fc = clip_to_geometry(fc, boundary_geom)
+        print(f'  clipped to boundary: dropped {before - len(fc["features"])} of '
+              f'{before} trees outside {city_id}')
     else:
         print(
             f'Warning: no boundary at {_BOUNDARY_DIR / city_id / "boundary.geojson"}; '
@@ -220,38 +220,15 @@ def cmd_fetch_trees(args: argparse.Namespace) -> None:
             file=sys.stderr,
         )
 
-    # Count guard (mirrors check_guard for the places pipeline).
-    n = len(coords)
-    if n < _TREES_MIN:
-        print(
-            f'Refusing to write: only {n} trees for {city_id} (< {_TREES_MIN}); '
-            'the export looks partial or empty.',
-            file=sys.stderr,
-        )
-        sys.exit(1)
+    check_guard(fc, city_id, 'trees', _TREES_MIN)
 
     out_file = out_dir / city_id / 'trees.geojson'
     out_file.parent.mkdir(parents=True, exist_ok=True)
 
-    # Drop guard against the committed MultiPoint (counts coordinates, not features).
-    if out_file.exists():
-        try:
-            existing = json.loads(out_file.read_text())
-            existing_count = len(existing.get('coordinates', []))
-        except Exception:
-            existing_count = 0
-        threshold = existing_count * _DROP_GUARD_FRACTION
-        if existing_count and n < threshold:
-            print(
-                f'Drop guard triggered for {city_id}/trees: new total {n} < '
-                f'{_DROP_GUARD_FRACTION:.0%} of committed {existing_count} '
-                f'({threshold:.0f}). Refusing to write — the export may be partial.',
-                file=sys.stderr,
-            )
-            sys.exit(1)
+    _check_drop_guard(fc, out_file, city_id, 'trees')
 
-    print(f'Fetched {n} trees for {city_id}')
-    write_geojson(geojson, str(out_file))
+    print(f'Fetched {len(fc["features"])} trees for {city_id}')
+    write_geojson(fc, str(out_file))
 
 
 def cmd_fetch_transit(args: argparse.Namespace) -> None:
