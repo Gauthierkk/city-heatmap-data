@@ -30,6 +30,10 @@ class CityDef:
     # which the Geoapify provider uses as `filter=place:...`. Disambiguate fully
     # (e.g. include state/country). Falls back to `name` when empty.
     geoapify_query: str = ''
+    # Soft-deprecated cities are kept in the registry (and their committed data is
+    # left in place) but the fetch pipeline skips them unless `--force` is passed.
+    # See cli.py:_is_fetch_blocked.
+    deprecated: bool = False
 
 
 CITIES: dict[str, CityDef] = {
@@ -61,6 +65,8 @@ CITIES: dict[str, CityDef] = {
         # If the big city relation is unavailable, assemble the five boroughs
         fallback_relations=(2552485, 369518, 369519, 2552450, 962876),
         geoapify_query='New York City, New York, USA',
+        # Soft-deprecated: committed data kept, fetching disabled unless --force.
+        deprecated=True,
     ),
     'austin': CityDef(
         id='austin',
@@ -75,6 +81,8 @@ CITIES: dict[str, CityDef] = {
         # (unincorporated enclaves) which area_km2() subtracts
         area_range=(600.0, 1000.0),
         geoapify_query='Austin, Texas, USA',
+        # Soft-deprecated: committed data kept, fetching disabled unless --force.
+        deprecated=True,
     ),
 }
 

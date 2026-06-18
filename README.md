@@ -28,15 +28,18 @@ so the data must live in the front-end repo — this worker only *generates* it.
 2. `git -C ../city-heatmap-front pull --ff-only` (the worker only ever touches
    `public/data/`; humans own the code, so this stays fast-forward).
 3. `python3 -m fetcher fetch-stores --all --out-dir ../city-heatmap-front/public/data`
-   — 6 files (paris/nyc/austin × food/fitness). Each is built by querying every
-   provider for that city+dataset and merging into one duplicate-free set; ~10 s
-   between rounds.
+   — Each file is built by querying every provider for that city+dataset and
+   merging into one duplicate-free set; ~10 s between rounds. **nyc and austin
+   are soft-deprecated**: their committed data is kept but `--all` skips them, so
+   only the paris × food/fitness files refresh. Pass `--force` to refresh the
+   deprecated cities too.
 4. If `public/data` changed, commit `chore(data): weekly refresh <date>` and
    push `main`; otherwise exit quietly (deterministic, timestamp-free output +
    per-dataset guards mean unchanged weeks produce no commit/redeploy).
 
 Boundaries are **not** in the weekly job (they rarely change) — refresh by hand:
-`python3 -m fetcher fetch-boundary <city> --out-dir ../city-heatmap-front/public/data`.
+`python3 -m fetcher fetch-boundary <city> --out-dir ../city-heatmap-front/public/data`
+(deprecated cities need `--force` here too).
 
 Two Paris-only extra layers run as separate pipelines and are also excluded from
 the weekly job — refresh by hand:

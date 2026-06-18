@@ -151,12 +151,16 @@ refuses to write below 200 stations.
 ```bash
 # Fetch store data — defaults to paris food
 python3 -m fetcher fetch-stores
-python3 -m fetcher fetch-stores nyc
-python3 -m fetcher fetch-stores nyc fitness
 python3 -m fetcher fetch-stores paris fitness
 
-# Fetch all cities × datasets (paris food, paris fitness, nyc food, ...)
-# Sleeps ~10 s between provider rounds to be polite
+# nyc and austin are soft-deprecated: their committed data is kept, but fetching
+# is skipped unless --force is passed.
+python3 -m fetcher fetch-stores nyc                  # skipped (prints a notice)
+python3 -m fetcher fetch-stores nyc fitness --force  # actually refreshes nyc
+
+# Fetch all cities × datasets. Deprecated cities (nyc, austin) are skipped, so
+# this refreshes paris food + paris fitness only; add --force to include them.
+# Sleeps ~10 s between provider rounds to be polite.
 python3 -m fetcher fetch-stores --all
 
 # Restrict which providers are queried
@@ -166,8 +170,8 @@ python3 -m fetcher fetch-stores paris food --providers osm    # OSM only
 
 # Fetch city admin boundary — defaults to paris
 python3 -m fetcher fetch-boundary
-python3 -m fetcher fetch-boundary nyc
-python3 -m fetcher fetch-boundary austin
+python3 -m fetcher fetch-boundary nyc    --force   # deprecated: needs --force
+python3 -m fetcher fetch-boundary austin --force   # deprecated: needs --force
 
 # Fetch the Paris street-tree density layer (Paris-only, separate pipeline)
 python3 -m fetcher fetch-trees
@@ -179,7 +183,7 @@ python3 -m fetcher fetch-transit paris --out-dir ../city-heatmap-front/public/da
 
 # Write to an explicit out-dir (the weekly wrapper passes the front-end repo)
 python3 -m fetcher fetch-stores --all --out-dir ../city-heatmap-front/public/data
-python3 -m fetcher fetch-stores nyc fitness --out-dir /tmp/out
+python3 -m fetcher fetch-stores nyc fitness --force --out-dir /tmp/out
 ```
 
 ### Output files
@@ -210,8 +214,9 @@ Boundaries are excluded from the weekly job — refresh them by hand when needed
 
 ```bash
 python3 -m fetcher fetch-boundary paris  --out-dir ../city-heatmap-front/public/data
-python3 -m fetcher fetch-boundary nyc    --out-dir ../city-heatmap-front/public/data
-python3 -m fetcher fetch-boundary austin --out-dir ../city-heatmap-front/public/data
+# nyc and austin are deprecated — pass --force to refresh their boundaries:
+python3 -m fetcher fetch-boundary nyc    --force --out-dir ../city-heatmap-front/public/data
+python3 -m fetcher fetch-boundary austin --force --out-dir ../city-heatmap-front/public/data
 ```
 
 The **trees** and **transit** layers are likewise excluded from the weekly job

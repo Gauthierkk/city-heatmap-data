@@ -49,6 +49,26 @@ _TRANSIT_MIN = 200
 _DROP_GUARD_FRACTION = 0.70
 
 
+def _is_fetch_blocked(city_id: str, force: bool) -> bool:
+    """Return True if fetching for this city should be skipped.
+
+    Soft-deprecated cities (CityDef.deprecated) keep their committed data but are
+    not refreshed unless `--force` is passed. Prints a one-line notice and returns
+    True when a fetch is skipped; returns False when the fetch should proceed.
+    """
+    city = city_by_id(city_id)
+    if not city.deprecated:
+        return False
+    if force:
+        print(f'{city_id} is deprecated; fetching anyway because --force was passed.')
+        return False
+    print(
+        f'Skipping {city_id}: this city is deprecated. Its committed data is kept '
+        f'as-is. Pass --force to refresh it anyway.'
+    )
+    return True
+
+
 def _check_drop_guard(merged_geojson: dict, out_file: Path, city_id: str, dataset_id: str) -> None:
     """Refuse to write if the new total dropped below 70 % of the committed file."""
     if not out_file.exists():
@@ -162,10 +182,15 @@ def cmd_fetch_stores(args: argparse.Namespace) -> None:
     if args.all:
         # All cities × datasets with a polite ~10 s sleep between provider rounds
         combos = [(c, d) for c in CITIES for d in DATASETS]
-        for i, (city_id, dataset_id) in enumerate(combos):
-            if i > 0:
+        first = True
+        for city_id, dataset_id in combos:
+            # Skip deprecated cities entirely (across every dataset) unless --force.
+            if _is_fetch_blocked(city_id, args.force):
+                continue
+            if not first:
                 print('Sleeping 10 s between provider rounds ...')
                 time.sleep(10)
+            first = False
             print(f'--- {city_id}/{dataset_id} ---')
             _fetch_stores_one(city_id, dataset_id, out_dir, allow, deny)
     else:
@@ -174,12 +199,16 @@ def cmd_fetch_stores(args: argparse.Namespace) -> None:
         # Validate early so we get a clean error before hitting the network
         city_by_id(city_id)
         dataset_by_id(dataset_id)
+        if _is_fetch_blocked(city_id, args.force):
+            return
         _fetch_stores_one(city_id, dataset_id, out_dir, allow, deny)
 
 
 def cmd_fetch_boundary(args: argparse.Namespace) -> None:
     city_id = args.city or 'paris'
     city = city_by_id(city_id)
+    if _is_fetch_blocked(city_id, args.force):
+        return
     out_dir = Path(args.out_dir).resolve() if args.out_dir else _BOUNDARY_DIR
 
     feature = fetch_boundary(city)
@@ -346,6 +375,12 @@ def build_parser() -> argparse.ArgumentParser:
         default=False,
         help='Skip the SIRENE provider (Paris-only food/fitness enrichment from data.gouv).',
     )
+    p_stores.add_argument(
+        '--force',
+        action='store_true',
+        default=False,
+        help='Fetch deprecated cities (e.g. nyc, austin) too. By default they are skipped.',
+    )
 
     # --- fetch-boundary ---
     p_boundary = sub.add_parser(
@@ -363,6 +398,12 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         metavar='DIR',
         help='Write GeoJSON file here instead of the default data/boundaries/ folder',
+    )
+    p_boundary.add_argument(
+        '--force',
+        action='store_true',
+        default=False,
+        help='Fetch deprecated cities (e.g. nyc, austin) too. By default they are skipped.',
     )
 
     # --- fetch-trees ---

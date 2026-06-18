@@ -121,7 +121,7 @@ help:
 	@echo 'Maintenance:'
 	@echo '  make clean-bounds             drop committed places outside city polygons (no network)'
 	@echo ''
-	@echo '  cities     : $(CITIES) (or all)'
+	@echo '  cities     : $(CITIES) (or all) — nyc, austin are deprecated; fetching them needs --force'
 	@echo '  categories : $(DATASETS) (or all)'
 
 .PHONY: help load boundary trees transit clean-bounds $(CITIES) $(DATASETS) all
