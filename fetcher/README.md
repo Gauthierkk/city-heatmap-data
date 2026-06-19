@@ -130,6 +130,31 @@ Each station carries a **list** of categories (no address):
 Montparnasse, Saint-Lazare — Bercy excluded) also get `major_station`. A guard
 refuses to write below 200 stations.
 
+## Pharmacies (separate pipeline)
+
+The Paris **pharmacy** layer is another separate, Paris-only pipeline
+(`fetch-pharmacies`, `providers/pharmacies.py`). Source: the Région Île-de-France
+open-data register
+[`carte-des-pharmacies-de-paris`](https://www.data.gouv.fr/datasets/carte-des-pharmacies-de-paris-idf)
+(≈987 establishments, all *département* 75, each with a FINESS id, name and street
+address). Unlike trees/transit it needs **no special output format** — it emits a
+normal store-shaped FeatureCollection with `shop = "pharmacy"`, so the front end
+renders it through the ordinary places machinery (dots + distance overlay +
+closest-places). The ALL-CAPS register text is title-cased for display parity:
+
+```jsonc
+"properties": {
+  "id": "pharmacy/750009227",   // FINESS établissement id
+  "name": "Grande Pharmacie La Paix Opera",
+  "shop": "pharmacy",
+  "address": { "housenumber": "24", "street": "Rue De La Paix", "postcode": "75002", "city": "Paris" }
+}
+```
+
+The result is clipped to the committed Paris boundary (the register is already
+Paris-only, so this is defensive) and guarded against a partial fetch (`< 700`
+pharmacies ⇒ refuse).
+
 ## Requirements
 
 - **Python 3.11+** (tested on 3.14). Stdlib only for the OSM provider.
@@ -181,6 +206,10 @@ python3 -m fetcher fetch-trees paris --out-dir ../city-heatmap-front/public/data
 python3 -m fetcher fetch-transit
 python3 -m fetcher fetch-transit paris --out-dir ../city-heatmap-front/public/data
 
+# Fetch the Paris pharmacy layer (Paris-only, separate pipeline)
+python3 -m fetcher fetch-pharmacies
+python3 -m fetcher fetch-pharmacies paris --out-dir ../city-heatmap-front/public/data
+
 # Write to an explicit out-dir (the weekly wrapper passes the front-end repo)
 python3 -m fetcher fetch-stores --all --out-dir ../city-heatmap-front/public/data
 python3 -m fetcher fetch-stores nyc fitness --force --out-dir /tmp/out
@@ -197,6 +226,7 @@ Nested per city — `<out-dir>/<city>/<name>.geojson`:
 | `fetch-boundary <city>` | `<city>/boundary.geojson` |
 | `fetch-trees paris` | `<city>/trees.geojson` (`trees-columnar-v1`: species table + parallel coord/index arrays, Paris-only) |
 | `fetch-transit paris` | `<city>/transit.geojson` (FeatureCollection, Paris-only) |
+| `fetch-pharmacies paris` | `<city>/pharmacy.geojson` (FeatureCollection, `shop=pharmacy`, Paris-only) |
 
 ### Guards
 
@@ -219,12 +249,14 @@ python3 -m fetcher fetch-boundary nyc    --force --out-dir ../city-heatmap-front
 python3 -m fetcher fetch-boundary austin --force --out-dir ../city-heatmap-front/public/data
 ```
 
-The **trees** and **transit** layers are likewise excluded from the weekly job
-(they change slowly and are Paris-only) — refresh by hand when needed:
+The **trees**, **transit** and **pharmacies** layers are likewise excluded from
+the weekly job (they change slowly and are Paris-only) — refresh by hand when
+needed:
 
 ```bash
-python3 -m fetcher fetch-trees   paris --out-dir ../city-heatmap-front/public/data
-python3 -m fetcher fetch-transit paris --out-dir ../city-heatmap-front/public/data
+python3 -m fetcher fetch-trees      paris --out-dir ../city-heatmap-front/public/data
+python3 -m fetcher fetch-transit    paris --out-dir ../city-heatmap-front/public/data
+python3 -m fetcher fetch-pharmacies paris --out-dir ../city-heatmap-front/public/data
 ```
 
 ## Sync notes

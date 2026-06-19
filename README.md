@@ -41,12 +41,14 @@ Boundaries are **not** in the weekly job (they rarely change) — refresh by han
 `python3 -m fetcher fetch-boundary <city> --out-dir ../city-heatmap-front/public/data`
 (deprecated cities need `--force` here too).
 
-Two Paris-only extra layers run as separate pipelines and are also excluded from
+Three Paris-only extra layers run as separate pipelines and are also excluded from
 the weekly job — refresh by hand:
 - **street trees** (`fetch-trees`; a Point FeatureCollection carrying each tree's species in French + English, not the store schema):
   `python3 -m fetcher fetch-trees paris --out-dir ../city-heatmap-front/public/data`.
 - **public transit** (`fetch-transit`; stations with a `categories` list):
   `python3 -m fetcher fetch-transit paris --out-dir ../city-heatmap-front/public/data`.
+- **pharmacies** (`fetch-pharmacies`; the Paris pharmacy register, normal store schema with `shop=pharmacy`):
+  `python3 -m fetcher fetch-pharmacies paris --out-dir ../city-heatmap-front/public/data`.
 
 See [fetcher/README.md](fetcher/README.md) for the fetch package's commands, guards,
 Overture/duckdb details, and front-end sync notes.

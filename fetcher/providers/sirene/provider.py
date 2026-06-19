@@ -22,21 +22,13 @@ from typing import Any
 
 from ...cities import CityDef
 from ...duckdb_io import connect, require_duckdb, sql_str_list
-from ...transform.geojson_io import make_feature
+from ...transform.geojson_io import make_feature, titlecase
 from . import datagouv
 from .naf import NAF_TO_SHOP, naf_codes_for
 
 # Paris intra-muros INSEE commune codes (the 20 arrondissements, 75101–75120).
 # This is the whole France-only scope of the provider.
 PARIS_COMMUNES: tuple[str, ...] = tuple(f'{75100 + i}' for i in range(1, 21))
-
-
-def _titlecase(value: str | None) -> str | None:
-    """SIRENE text is ALL-CAPS; title-case it for display parity with other
-    providers, but leave already-mixed-case strings untouched."""
-    if value and value.isupper():
-        return value.title()
-    return value
 
 
 _QUERY_TMPL = """\
@@ -117,15 +109,15 @@ def fetch_sirene(city: CityDef, dataset_id: str = 'food') -> dict[str, Any]:
             continue  # guarded by the NAF filter, but stay safe
         features.append(make_feature(
             f'sirene/{siret}',
-            _titlecase(name),
+            titlecase(name),
             shop,
             lon,
             lat,
             {
                 'housenumber': housenumber,
-                'street': _titlecase(street),
+                'street': titlecase(street),
                 'postcode': postcode,
-                'city': _titlecase(city_name),
+                'city': titlecase(city_name),
             },
         ))
 

@@ -8,8 +8,9 @@
 #   make load all fitness         # all cities x fitness
 #
 # When the category is left as `all` and paris is in scope, `load` also pulls the
-# Paris-only extra layers (street trees + public transit, each its own separate
-# pipeline). `make trees` / `make transit` run them alone.
+# Paris-only extra layers (street trees + public transit + pharmacies, each its
+# own separate pipeline). `make trees` / `make transit` / `make pharmacies` run
+# them alone.
 #
 #   make boundary                 # all city boundaries
 #   make boundary austin          # one city boundary
@@ -76,6 +77,8 @@ load:
 	  $(FETCH) fetch-trees paris || exit $$?; \
 	  echo '--- paris/transit ---'; \
 	  $(FETCH) fetch-transit paris || exit $$?; \
+	  echo '--- paris/pharmacies ---'; \
+	  $(FETCH) fetch-pharmacies paris || exit $$?; \
 	fi
 
 ## boundary: fetch <city|all> admin boundary (default all)
@@ -94,6 +97,10 @@ trees:
 ## transit: fetch the Paris public-transit station layer (paris-only, separate pipeline)
 transit:
 	$(FETCH) fetch-transit paris
+
+## pharmacies: fetch the Paris pharmacy layer (paris-only, separate pipeline)
+pharmacies:
+	$(FETCH) fetch-pharmacies paris
 
 ## clean-bounds: drop already-committed places outside their city polygon (no network)
 clean-bounds:
@@ -117,6 +124,7 @@ help:
 	@echo 'Paris-only extra layers (separate pipelines, also pulled by `make load paris`):'
 	@echo '  make trees                    fetch the Paris street-tree layer'
 	@echo '  make transit                  fetch the Paris public-transit station layer'
+	@echo '  make pharmacies               fetch the Paris pharmacy layer'
 	@echo ''
 	@echo 'Maintenance:'
 	@echo '  make clean-bounds             drop committed places outside city polygons (no network)'
@@ -124,4 +132,4 @@ help:
 	@echo '  cities     : $(CITIES) (or all) — nyc, austin are deprecated; fetching them needs --force'
 	@echo '  categories : $(DATASETS) (or all)'
 
-.PHONY: help load boundary trees transit clean-bounds $(CITIES) $(DATASETS) all
+.PHONY: help load boundary trees transit pharmacies clean-bounds $(CITIES) $(DATASETS) all

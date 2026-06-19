@@ -23,6 +23,15 @@ from ..geo import COORD_DP
 ADDRESS_FIELDS = ('housenumber', 'street', 'postcode', 'city')
 
 
+def titlecase(value: str | None) -> str | None:
+    """Title-case an ALL-CAPS source string for display parity with other
+    providers, leaving already-mixed-case strings untouched (SIRENE and the
+    Paris pharmacy/IDF open-data feeds are ALL-CAPS)."""
+    if value and value.isupper():
+        return value.title()
+    return value
+
+
 def clean_address(address: dict[str, Any] | None) -> dict[str, str] | None:
     """Keep only populated address subfields, in canonical order; None if empty."""
     if not address:
