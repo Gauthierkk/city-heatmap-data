@@ -18,7 +18,7 @@ are gone. `trees-columnar-v1` is the documented contract with the front-end repo
 `species_fr` is the dataset's `libellefrancais` (French common name, e.g.
 Marronnier, Platane, Tilleul); `species_en` is its English common name via
 `tree_species_en.english_name()`. A tree with no recorded species gets empty
-strings. Coordinates are kept to 5 dp (≈1.1 m) — a density layer needs no
+strings. Coordinates are kept to 4 dp (≈11 m) — a density layer needs no
 sub-metre precision and it trims the ~200k-point file.
 
 PARIS-ONLY: returns an empty FeatureCollection for every other city (no equivalent
@@ -50,10 +50,10 @@ _SELECT = 'geo_point_2d,libellefrancais'
 # Generous timeout: the full export is tens of MB.
 _TIMEOUT_S = 300
 
-# Coordinate precision — 5 dp ≈ 1.1 m. The package elsewhere keeps 6 dp, but a
-# tree density layer needs no sub-metre precision, and 5 dp trims ~10% off a
-# 200k-point file.
-_COORD_DP = 5
+# Coordinate precision — 4 dp ≈ 11 m. The package elsewhere keeps 6 dp, but a
+# tree density layer (default 25 m spread) needs nothing finer, and 4 dp trims
+# ~30% off a 200k-point file.
+_COORD_DP = 4
 
 
 def fetch_trees(city: CityDef) -> dict[str, Any]:
