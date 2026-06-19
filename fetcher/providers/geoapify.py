@@ -30,15 +30,13 @@ records, so including them would risk the very duplicates we're trying to avoid.
 
 from __future__ import annotations
 
-import json
 import sys
-import urllib.error
 import urllib.parse
-import urllib.request
 from typing import Any
 
 from .. import config
 from ..cities import CityDef
+from ..http import get_json
 from ..transform.geojson_io import make_feature
 
 _PLACES_ENDPOINT = 'https://api.geoapify.com/v2/places'
@@ -46,7 +44,6 @@ _GEOCODE_ENDPOINT = 'https://api.geoapify.com/v1/geocode/search'
 _LIMIT = 500            # Geoapify per-request (and per-page) maximum
 _MAX_PAGES = 200        # pagination guard: 200 * 500 = 100k places; no city is close
 _TIMEOUT = 60
-_USER_AGENT = 'city-heatmap-data/0.1 (weekly data refresh worker)'
 
 # Geoapify dotted category -> canonical type. Verified against the live taxonomy.
 _CATEGORY_TO_TYPE: dict[str, str] = {
@@ -100,30 +97,14 @@ def _classify(categories: list[str]) -> str | None:
 _place_id_cache: dict[str, str | None] = {}
 
 
-def _get(url: str) -> dict[str, Any]:
-    """GET a Geoapify endpoint and return parsed JSON, retrying transient errors."""
-    req = urllib.request.Request(url, headers={'User-Agent': _USER_AGENT})
-    last_error: Exception | None = None
-    for _ in range(3):
-        try:
-            with urllib.request.urlopen(req, timeout=_TIMEOUT) as resp:
-                return json.loads(resp.read())
-        except urllib.error.HTTPError as exc:
-            # 4xx (bad category, bad key etc.) won't fix itself — fail fast.
-            if 400 <= exc.code < 500:
-                raise RuntimeError(f'Geoapify {exc.code}: {exc.read().decode()[:200]}') from None
-            last_error = exc
-        except Exception as exc:  # transient network/5xx — retry
-            last_error = exc
-    raise RuntimeError(f'Geoapify request failed after retries: {last_error}')
-
-
 def _resolve_place_id(query: str, key: str) -> str | None:
     """Geocode a city name to its Geoapify boundary place_id (cached per run)."""
     if query in _place_id_cache:
         return _place_id_cache[query]
     params = {'text': query, 'type': 'city', 'format': 'json', 'limit': '1', 'apiKey': key}
-    results = _get(f'{_GEOCODE_ENDPOINT}?{urllib.parse.urlencode(params)}').get('results', [])
+    results = get_json(
+        f'{_GEOCODE_ENDPOINT}?{urllib.parse.urlencode(params)}', timeout=_TIMEOUT
+    ).get('results', [])
     place_id = results[0].get('place_id') if results else None
     _place_id_cache[query] = place_id
     return place_id
@@ -141,7 +122,9 @@ def _fetch_boundary(categories: str, place_id: str, key: str) -> dict[str, dict[
             'offset': str(offset),
             'apiKey': key,
         }
-        feats = _get(f'{_PLACES_ENDPOINT}?{urllib.parse.urlencode(params)}').get('features', [])
+        feats = get_json(
+            f'{_PLACES_ENDPOINT}?{urllib.parse.urlencode(params)}', timeout=_TIMEOUT
+        ).get('features', [])
         for f in feats:
             pid = f['properties'].get('place_id')
             if pid and pid not in out:

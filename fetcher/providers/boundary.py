@@ -12,22 +12,13 @@ five borough relations.
 
 from __future__ import annotations
 
-import json
 import math
 import sys
-import urllib.error
-import urllib.parse
-import urllib.request
 from typing import Any
 
 from ..cities import CityDef
-
-USER_AGENT = 'city-heatmap-data/0.1 (boundary fetch worker)'
-
-OVERPASS_ENDPOINTS = [
-    'https://overpass-api.de/api/interpreter',
-    'https://overpass.kumi.systems/api/interpreter',
-]
+from ..geo import COORD_DP, point_in_ring
+from ..http import get_json, post_overpass
 
 
 # ---------------------------------------------------------------------------
@@ -37,11 +28,7 @@ OVERPASS_ENDPOINTS = [
 def _from_polygons_service(relation_id: int) -> dict[str, Any]:
     url = f'https://polygons.openstreetmap.fr/get_geojson.py?id={relation_id}&params=0'
     print(f'Trying {url} ...')
-    req = urllib.request.Request(url, headers={'User-Agent': USER_AGENT})
-    with urllib.request.urlopen(req) as resp:
-        if resp.status != 200:
-            raise urllib.error.HTTPError(url, resp.status, resp.reason, {}, None)
-        geom: dict[str, Any] = json.loads(resp.read())
+    geom: dict[str, Any] = get_json(url, timeout=60)
 
     # The service sometimes wraps the result in a GeometryCollection
     if geom.get('type') == 'GeometryCollection':
@@ -84,20 +71,6 @@ def _stitch_rings(ways: list[list[list[float]]]) -> list[list[list[float]]]:
     return rings
 
 
-def _point_in_ring(point: list[float], ring: list[list[float]]) -> bool:
-    """Ray-casting point-in-polygon test."""
-    x, y = point[0], point[1]
-    inside = False
-    j = len(ring) - 1
-    for i in range(len(ring)):
-        xi, yi = ring[i][0], ring[i][1]
-        xj, yj = ring[j][0], ring[j][1]
-        if (yi > y) != (yj > y) and x < (xj - xi) * (y - yi) / (yj - yi) + xi:
-            inside = not inside
-        j = i
-    return inside
-
-
 def _assemble_polygons(members: list[dict[str, Any]]) -> dict[str, Any]:
     """Assemble a Polygon or MultiPolygon from a relation's member list."""
     def ways_for_role(role: str) -> list[list[list[float]]]:
@@ -113,7 +86,10 @@ def _assemble_polygons(members: list[dict[str, Any]]) -> dict[str, Any]:
     polygons: list[list[list[list[float]]]] = [[outer] for outer in outers]
     for inner in inners:
         # Assign inner ring to the first outer that contains it
-        host = next((p for p in polygons if _point_in_ring(inner[0], p[0])), None)
+        host = next(
+            (p for p in polygons if point_in_ring(inner[0][0], inner[0][1], p[0])),
+            None,
+        )
         if host is not None:
             host.append(inner)
 
@@ -124,36 +100,14 @@ def _assemble_polygons(members: list[dict[str, Any]]) -> dict[str, Any]:
 
 def _from_overpass(relation_id: int) -> dict[str, Any]:
     query = f'[out:json][timeout:300];rel({relation_id});out geom;'
-    last_error: Exception | None = None
-    for endpoint in OVERPASS_ENDPOINTS:
-        try:
-            print(f'Querying {endpoint} for relation {relation_id} ...')
-            body = urllib.parse.urlencode({'data': query}).encode()
-            req = urllib.request.Request(
-                endpoint,
-                data=body,
-                method='POST',
-                headers={'User-Agent': USER_AGENT},
-            )
-            with urllib.request.urlopen(req) as resp:
-                if resp.status != 200:
-                    raise urllib.error.HTTPError(
-                        endpoint, resp.status, resp.reason, {}, None
-                    )
-                result = json.loads(resp.read())
-
-            rel = next(
-                (el for el in (result.get('elements') or []) if el.get('type') == 'relation'),
-                None,
-            )
-            if rel is None:
-                raise ValueError('relation not found in response')
-            return _assemble_polygons(rel.get('members') or [])
-        except Exception as exc:
-            print(f'  failed: {exc}', file=sys.stderr)
-            last_error = exc
-
-    raise RuntimeError(f'All Overpass endpoints failed. Last error: {last_error}')
+    result = post_overpass(query, note=f'for relation {relation_id}')
+    rel = next(
+        (el for el in (result.get('elements') or []) if el.get('type') == 'relation'),
+        None,
+    )
+    if rel is None:
+        raise ValueError('relation not found in response')
+    return _assemble_polygons(rel.get('members') or [])
 
 
 def _fetch_relation(relation_id: int) -> dict[str, Any]:
@@ -298,7 +252,7 @@ def fetch_boundary(city: CityDef) -> dict[str, Any]:
 
     def simplify_and_round(ring: list[list[float]]) -> list[list[float]]:
         simplified = _simplify_ring(ring, city.tolerance_deg)
-        return [[round(p[0], 6), round(p[1], 6)] for p in simplified]
+        return [[round(p[0], COORD_DP), round(p[1], COORD_DP)] for p in simplified]
 
     before_points = _count_points(raw)
     simplified = _map_rings(raw, simplify_and_round)

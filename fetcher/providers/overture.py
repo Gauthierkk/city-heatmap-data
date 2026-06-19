@@ -3,13 +3,9 @@
 Queries s3://overturemaps-us-west-2/release/<RELEASE>/theme=places/type=place/*
 via DuckDB (anonymous S3, hive-partitioned Parquet).
 
-duckdb is NOT a stdlib dependency — it is imported lazily so OSM-only commands
-keep working without it.  Install once with:
-
-    pip3 install duckdb --user --break-system-packages   # python3 3.11+
-    # or for python3.10: pip3.10 install duckdb --user
-
-See fetcher/README.md for full dependency notes.
+duckdb is NOT a stdlib dependency — it is imported lazily (see duckdb_io) so
+OSM-only commands keep working without it. Install with `uv sync`; see
+fetcher/README.md for full dependency notes.
 """
 
 from __future__ import annotations
@@ -18,6 +14,7 @@ import sys
 from typing import Any
 
 from ..cities import CityDef
+from ..duckdb_io import connect, require_duckdb, sql_str_list
 from ..transform.geojson_io import make_feature
 
 # ---------------------------------------------------------------------------
@@ -61,7 +58,7 @@ _CATEGORY_TO_TYPE: dict[str, str] = {
     "rock_climbing_spot":      "climbing",
 }
 
-_CAT_LIST_SQL = ", ".join(f"'{c}'" for c in _CATEGORY_TO_TYPE)
+_CAT_LIST_SQL = sql_str_list(_CATEGORY_TO_TYPE)
 
 _QUERY_TMPL = """\
 SELECT
@@ -99,17 +96,7 @@ def fetch_overture(city: CityDef, dataset_id: str = 'fitness') -> dict[str, Any]
     if dataset_id != 'fitness':
         return {'type': 'FeatureCollection', 'features': []}
 
-    try:
-        import duckdb  # noqa: F401 — lazy import
-    except ImportError:
-        raise ImportError(
-            "duckdb is required for Overture-backed datasets but is not installed.\n"
-            "Install with:\n"
-            "  pip3 install duckdb --user --break-system-packages\n"
-            "Or run with --no-overture to use OSM data only."
-        ) from None
-
-    import duckdb
+    duckdb = require_duckdb('Overture')
 
     min_lon, min_lat, max_lon, max_lat = city.bbox
     query = _QUERY_TMPL.format(
@@ -127,12 +114,7 @@ def fetch_overture(city: CityDef, dataset_id: str = 'fitness') -> dict[str, Any]
         f'(conf≥{OVERTURE_CONFIDENCE_MIN}) ...'
     )
 
-    con = duckdb.connect()
-    con.execute("INSTALL httpfs; LOAD httpfs;")
-    con.execute("INSTALL spatial; LOAD spatial;")
-    con.execute("SET s3_region='us-west-2';")
-    con.execute("SET s3_access_key_id=''; SET s3_secret_access_key='';")
-
+    con = connect(duckdb, spatial=True, s3=True)
     rows = con.execute(query).fetchall()
     print(f'  Retrieved {len(rows)} Overture candidates for {city.id}', file=sys.stderr)
 

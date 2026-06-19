@@ -14,10 +14,7 @@ and picking the right resource by format + title.
 
 from __future__ import annotations
 
-import json
-import urllib.request
-
-USER_AGENT = 'city-heatmap-data/0.1 (sirene fetch worker)'
+from ...http import get_json
 
 GEO_DATASET_ID = '61d5e2d372a52d9f9411ff88'
 STOCK_DATASET_ID = 'base-sirene-des-entreprises-et-de-leurs-etablissements-siren-siret'
@@ -31,10 +28,7 @@ _STOCK_TITLE_MARKER = 'stocketablissement -'
 
 def _resources(dataset_id: str) -> list[dict]:
     url = f'https://www.data.gouv.fr/api/1/datasets/{dataset_id}/'
-    req = urllib.request.Request(url, headers={'User-Agent': USER_AGENT})
-    with urllib.request.urlopen(req, timeout=60) as resp:
-        data = json.loads(resp.read())
-    return data.get('resources') or []
+    return get_json(url, timeout=60).get('resources') or []
 
 
 def _pick(resources: list[dict], title_marker: str | None) -> str:

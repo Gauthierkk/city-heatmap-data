@@ -27,7 +27,8 @@ import re
 import unicodedata
 from typing import Any
 
-from .geojson_io import is_named
+from ..geo import haversine_m
+from .geojson_io import ADDRESS_FIELDS, is_named
 
 # Max distance (m) for two features to be considered the same place.
 DEFAULT_RADIUS_M = 100.0
@@ -35,8 +36,6 @@ DEFAULT_RADIUS_M = 100.0
 # Spatial bucket size (degrees) — ~9 km at mid-latitudes; one bucket in each
 # direction covers the merge radius comfortably.
 _BUCKET_DEG = 0.1
-
-_ADDRESS_FIELDS = ('housenumber', 'street', 'postcode', 'city')
 
 
 # ---------------------------------------------------------------------------
@@ -70,17 +69,6 @@ def _names_match(n1: str | None, n2: str | None) -> bool:
     return bool(union) and len(ta & tb) / len(union) >= 0.5
 
 
-def _haversine_m(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
-    R = 6_371_000.0
-    dlat = math.radians(lat2 - lat1)
-    dlon = math.radians(lon2 - lon1)
-    a = (
-        math.sin(dlat / 2) ** 2
-        + math.cos(math.radians(lat1)) * math.cos(math.radians(lat2)) * math.sin(dlon / 2) ** 2
-    )
-    return 2 * R * math.asin(math.sqrt(a))
-
-
 def _bucket_key(lon: float, lat: float) -> tuple[int, int]:
     return (int(math.floor(lon / _BUCKET_DEG)), int(math.floor(lat / _BUCKET_DEG)))
 
@@ -94,7 +82,7 @@ def _completeness(props: dict[str, Any]) -> int:
     score = 1 if props.get('name') else 0
     score += 1 if props.get('shop') else 0
     addr = props.get('address') or {}
-    score += sum(1 for k in _ADDRESS_FIELDS if addr.get(k))
+    score += sum(1 for k in ADDRESS_FIELDS if addr.get(k))
     return score
 
 
@@ -134,7 +122,7 @@ def _merge_cluster(cluster: list[dict[str, Any]]) -> dict[str, Any]:
 
     # Backfill each address subfield independently (source-neutral, most detailed).
     merged_addr: dict[str, str] = dict(props.get('address') or {})
-    for field in _ADDRESS_FIELDS:
+    for field in ADDRESS_FIELDS:
         if merged_addr.get(field):
             continue
         candidates = [
@@ -146,7 +134,7 @@ def _merge_cluster(cluster: list[dict[str, Any]]) -> dict[str, Any]:
         if val:
             merged_addr[field] = val
     # Re-emit in canonical field order for stable, tidy output.
-    props['address'] = {k: merged_addr[k] for k in _ADDRESS_FIELDS if merged_addr.get(k)} or None
+    props['address'] = {k: merged_addr[k] for k in ADDRESS_FIELDS if merged_addr.get(k)} or None
 
     return rep
 
@@ -205,7 +193,7 @@ def aggregate(
                         if not cross_type and anchor['properties'].get('shop') != shop:
                             continue  # same-type required
                         a_lon, a_lat = anchor['geometry']['coordinates']
-                        if (_haversine_m(lat, lon, a_lat, a_lon) <= radius_m
+                        if (haversine_m(lon, lat, a_lon, a_lat) <= radius_m
                                 and _names_match(name, anchor['properties'].get('name'))):
                             joined = ci
                             break

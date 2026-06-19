@@ -5,22 +5,11 @@ Mirrors the query logic from the retired scripts/fetch-stores.mjs exactly.
 
 from __future__ import annotations
 
-import urllib.request
-import urllib.parse
-import urllib.error
-import json
-import sys
 from typing import Any
 
 from ..cities import CityDef
+from ..http import post_overpass
 from ..transform.geojson_io import make_feature
-
-OVERPASS_ENDPOINTS = [
-    'https://overpass-api.de/api/interpreter',
-    'https://overpass.kumi.systems/api/interpreter',
-]
-
-USER_AGENT = 'city-heatmap-data/0.1 (weekly data refresh worker)'
 
 # ---------------------------------------------------------------------------
 # Food dataset
@@ -199,38 +188,6 @@ def dataset_by_id(dataset_id: str) -> dict[str, Any]:
 
 
 # ---------------------------------------------------------------------------
-# HTTP fetch
-# ---------------------------------------------------------------------------
-
-def fetch_overpass(query: str) -> dict[str, Any]:
-    """POST the query to each endpoint in turn; return parsed JSON on success."""
-    last_error: Exception | None = None
-    for endpoint in OVERPASS_ENDPOINTS:
-        try:
-            print(f'Querying {endpoint} ...')
-            body = urllib.parse.urlencode({'data': query}).encode()
-            req = urllib.request.Request(
-                endpoint,
-                data=body,
-                method='POST',
-                headers={'User-Agent': USER_AGENT},
-            )
-            with urllib.request.urlopen(req) as resp:
-                if resp.status != 200:
-                    raise urllib.error.HTTPError(
-                        endpoint, resp.status, resp.reason, {}, None
-                    )
-                return json.loads(resp.read())
-        except Exception as exc:
-            print(f'  failed: {exc}', file=sys.stderr)
-            last_error = exc
-
-    raise RuntimeError(
-        f'All Overpass endpoints failed. Last error: {last_error}'
-    )
-
-
-# ---------------------------------------------------------------------------
 # Provider entry point
 # ---------------------------------------------------------------------------
 
@@ -247,7 +204,7 @@ def _osm_address(tags: dict[str, str]) -> dict[str, str]:
 def fetch_osm(city: CityDef, dataset_id: str) -> dict[str, Any]:
     """Provider entry point: query Overpass and return a normalised FeatureCollection."""
     dataset = dataset_by_id(dataset_id)
-    raw = fetch_overpass(dataset['build_query'](city))
+    raw = post_overpass(dataset['build_query'](city))
     normalise = dataset['normalise']
 
     features: list[dict[str, Any]] = []

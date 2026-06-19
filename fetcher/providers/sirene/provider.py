@@ -21,6 +21,7 @@ import sys
 from typing import Any
 
 from ...cities import CityDef
+from ...duckdb_io import connect, require_duckdb, sql_str_list
 from ...transform.geojson_io import make_feature
 from . import datagouv
 from .naf import NAF_TO_SHOP, naf_codes_for
@@ -28,10 +29,6 @@ from .naf import NAF_TO_SHOP, naf_codes_for
 # Paris intra-muros INSEE commune codes (the 20 arrondissements, 75101–75120).
 # This is the whole France-only scope of the provider.
 PARIS_COMMUNES: tuple[str, ...] = tuple(f'{75100 + i}' for i in range(1, 21))
-
-
-def _sql_list(values) -> str:
-    return ', '.join(f"'{v}'" for v in values)
 
 
 def _titlecase(value: str | None) -> str | None:
@@ -94,15 +91,7 @@ def fetch_sirene(city: CityDef, dataset_id: str = 'food') -> dict[str, Any]:
     if not naf_codes:
         return empty
 
-    try:
-        import duckdb
-    except ImportError:
-        raise ImportError(
-            "duckdb is required for the SIRENE provider but is not installed.\n"
-            "Install with:\n"
-            "  uv sync\n"
-            "Or run with --no-sirene to skip SIRENE enrichment."
-        ) from None
+    duckdb = require_duckdb('SIRENE')
 
     geo_url = datagouv.geoloc_parquet_url()
     stock_url = datagouv.stock_parquet_url()
@@ -110,15 +99,13 @@ def fetch_sirene(city: CityDef, dataset_id: str = 'food') -> dict[str, Any]:
     query = _QUERY_TMPL.format(
         stock_url=stock_url,
         geo_url=geo_url,
-        communes=_sql_list(PARIS_COMMUNES),
-        naf_codes=_sql_list(naf_codes),
+        communes=sql_str_list(PARIS_COMMUNES),
+        naf_codes=sql_str_list(naf_codes),
     )
 
     print(f'Querying SIRENE (data.gouv) — paris {dataset_id} ...')
 
-    con = duckdb.connect()
-    con.execute("INSTALL httpfs; LOAD httpfs;")
-    con.execute("SET enable_progress_bar=false;")
+    con = connect(duckdb)
     rows = con.execute(query).fetchall()
     print(f'  Retrieved {len(rows)} SIRENE establishments for paris/{dataset_id}',
           file=sys.stderr)

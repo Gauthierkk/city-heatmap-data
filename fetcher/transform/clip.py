@@ -17,18 +17,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-
-def _in_ring(lon: float, lat: float, ring: list[list[float]]) -> bool:
-    """Ray-casting point-in-polygon test for a single [lon, lat] ring."""
-    inside = False
-    j = len(ring) - 1
-    for i in range(len(ring)):
-        xi, yi = ring[i][0], ring[i][1]
-        xj, yj = ring[j][0], ring[j][1]
-        if (yi > lat) != (yj > lat) and lon < (xj - xi) * (lat - yi) / (yj - yi) + xi:
-            inside = not inside
-        j = i
-    return inside
+from ..geo import point_in_ring
 
 
 def point_in_geometry(lon: float, lat: float, geom: dict[str, Any]) -> bool:
@@ -37,7 +26,7 @@ def point_in_geometry(lon: float, lat: float, geom: dict[str, Any]) -> bool:
     for poly in polys:
         outer = poly[0]
         holes = poly[1:]
-        if _in_ring(lon, lat, outer) and not any(_in_ring(lon, lat, h) for h in holes):
+        if point_in_ring(lon, lat, outer) and not any(point_in_ring(lon, lat, h) for h in holes):
             return True
     return False
 

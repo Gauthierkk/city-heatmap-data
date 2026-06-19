@@ -27,16 +27,13 @@ source wired up yet), mirroring how the SIRENE provider gates on Paris.
 
 from __future__ import annotations
 
-import json
 import sys
 import urllib.parse
-import urllib.request
 from typing import Any
 
 from ..cities import CityDef
+from ..http import get_json
 from .tree_species_en import english_name
-
-USER_AGENT = 'city-heatmap-data/0.1 (trees fetch worker)'
 
 # Opendatasoft Explore v2.1 bulk export — returns the whole dataset in one JSON
 # array (the paginated /records endpoint caps at offset 10000, unusable for 218k
@@ -71,9 +68,7 @@ def fetch_trees(city: CityDef) -> dict[str, Any]:
 
     url = f'{_EXPORT_URL}?{urllib.parse.urlencode({"select": _SELECT})}'
     print(f'Querying OpenData Paris (les-arbres) — {city.id} ...')
-    req = urllib.request.Request(url, headers={'User-Agent': USER_AGENT})
-    with urllib.request.urlopen(req, timeout=_TIMEOUT_S) as resp:
-        rows = json.loads(resp.read())
+    rows = get_json(url, timeout=_TIMEOUT_S)
 
     print(f'  Retrieved {len(rows)} tree records for {city.id}', file=sys.stderr)
 
@@ -126,27 +121,24 @@ def to_columnar(fc: dict[str, Any]) -> dict[str, Any]:
     `speciesIndex[i]` are parallel (one entry per tree). Indices are only stable
     within a single generated file; the front end reads them per file.
     """
-    features = fc['features']
-
-    # Frequency per distinct (fr, en) species pair — empty strings form their own
-    # key, so unnamed trees collapse to a single real table entry.
+    # Single pass over ~192k features: tally species frequency while collecting
+    # each tree's coordinate and species key (empty strings form their own key,
+    # so unnamed trees collapse to a single real table entry).
     counts: dict[tuple[str, str], int] = {}
-    for f in features:
+    keys: list[tuple[str, str]] = []
+    coordinates: list[list[float]] = []
+    for f in fc['features']:
         props = f['properties']
         key = (props['species_fr'], props['species_en'])
         counts[key] = counts.get(key, 0) + 1
+        keys.append(key)
+        coordinates.append(f['geometry']['coordinates'])
 
     # Most frequent first; tie-break on the name pair for deterministic output.
     ordered = sorted(counts, key=lambda k: (-counts[k], k))
     index_of = {key: i for i, key in enumerate(ordered)}
     species = [{'fr': fr, 'en': en} for fr, en in ordered]
-
-    coordinates: list[list[float]] = []
-    species_index: list[int] = []
-    for f in features:
-        coordinates.append(f['geometry']['coordinates'])
-        props = f['properties']
-        species_index.append(index_of[(props['species_fr'], props['species_en'])])
+    species_index = [index_of[k] for k in keys]
 
     return {
         'format': 'trees-columnar-v1',

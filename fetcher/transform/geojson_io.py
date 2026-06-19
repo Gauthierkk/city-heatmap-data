@@ -17,6 +17,8 @@ import os
 import sys
 from typing import Any
 
+from ..geo import COORD_DP
+
 # Address subfields, in display order. Providers may supply any subset.
 ADDRESS_FIELDS = ('housenumber', 'street', 'postcode', 'city')
 
@@ -46,7 +48,7 @@ def make_feature(
         'type': 'Feature',
         'geometry': {
             'type': 'Point',
-            'coordinates': [round(float(lon), 6), round(float(lat), 6)],
+            'coordinates': [round(float(lon), COORD_DP), round(float(lat), COORD_DP)],
         },
         'properties': {
             # str() guards against providers returning a numeric name (e.g. "1234").

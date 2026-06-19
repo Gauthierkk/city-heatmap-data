@@ -20,16 +20,13 @@ intra-muros stations (~297) survive. Output is a FeatureCollection of points wit
 
 from __future__ import annotations
 
-import json
-import math
 import sys
 import urllib.parse
-import urllib.request
 from typing import Any
 
 from ..cities import CityDef
-
-USER_AGENT = 'city-heatmap-data/0.1 (transit fetch worker)'
+from ..geo import COORD_DP, haversine_m
+from ..http import get_json
 
 # Opendatasoft Explore v2.1 bulk export (same API family as the trees source).
 _EXPORT_URL = (
@@ -39,7 +36,6 @@ _EXPORT_URL = (
 _SELECT = 'geo_point_2d,id_ref_zdc,nom_zdc,id_gares,mode'
 
 _TIMEOUT_S = 120
-_COORD_DP = 6
 
 # A hub's parts can sit under different zone-de-correspondance ids ~100-500 m
 # apart (e.g. Gare du Nord's metro/train zone vs its RER zone). We unify rows that
@@ -76,15 +72,6 @@ _MAJOR_STATIONS: frozenset[str] = frozenset({
 })
 
 
-def _haversine_m(lon1: float, lat1: float, lon2: float, lat2: float) -> float:
-    r = 6_371_000.0
-    dlat = math.radians(lat2 - lat1)
-    dlon = math.radians(lon2 - lon1)
-    a = (math.sin(dlat / 2) ** 2
-         + math.cos(math.radians(lat1)) * math.cos(math.radians(lat2)) * math.sin(dlon / 2) ** 2)
-    return 2 * r * math.asin(math.sqrt(a))
-
-
 def _categories(name: str | None, modes: set[str]) -> list[str]:
     """Category list for a station: its modes, with `major_station` prepended for
     the Paris mainline terminals."""
@@ -109,9 +96,7 @@ def fetch_transit(city: CityDef) -> dict[str, Any]:
 
     url = f'{_EXPORT_URL}?{urllib.parse.urlencode({"select": _SELECT})}'
     print(f'Querying IDF Mobilités (emplacement-des-gares-idf) — {city.id} ...')
-    req = urllib.request.Request(url, headers={'User-Agent': USER_AGENT})
-    with urllib.request.urlopen(req, timeout=_TIMEOUT_S) as resp:
-        rows = json.loads(resp.read())
+    rows = get_json(url, timeout=_TIMEOUT_S)
 
     print(f'  Retrieved {len(rows)} station-line records for {city.id}', file=sys.stderr)
 
@@ -141,7 +126,7 @@ def fetch_transit(city: CityDef) -> dict[str, Any]:
         for i in buckets.setdefault(token, []):
             st = stations[i]
             cx, cy = st['sx'] / st['n'], st['sy'] / st['n']
-            if _haversine_m(lon, lat, cx, cy) <= _MERGE_RADIUS_M:
+            if haversine_m(lon, lat, cx, cy) <= _MERGE_RADIUS_M:
                 placed = i
                 break
         if placed is None:
@@ -164,8 +149,8 @@ def fetch_transit(city: CityDef) -> dict[str, Any]:
 
     features: list[dict[str, Any]] = []
     for st in stations:
-        lon = round(st['sx'] / st['n'], _COORD_DP)
-        lat = round(st['sy'] / st['n'], _COORD_DP)
+        lon = round(st['sx'] / st['n'], COORD_DP)
+        lat = round(st['sy'] / st['n'], COORD_DP)
         features.append({
             'type': 'Feature',
             'geometry': {'type': 'Point', 'coordinates': [lon, lat]},

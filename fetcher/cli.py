@@ -94,6 +94,34 @@ def _check_drop_guard(merged_geojson: dict, out_file: Path, city_id: str, datase
         sys.exit(1)
 
 
+def _clip_to_city_or_warn(fc: dict, city_id: str, noun: str = 'features') -> dict:
+    """Clip a FeatureCollection to the committed city boundary.
+
+    Returns the clipped collection, or the input unchanged (with a warning) when no
+    boundary file exists yet. `noun` labels the dropped count (features/trees/stations).
+    """
+    boundary_geom = load_boundary_geometry(_BOUNDARY_DIR, city_id)
+    if boundary_geom is None:
+        print(
+            f'Warning: no boundary at {_BOUNDARY_DIR / city_id / "boundary.geojson"}; '
+            f'skipping clip for {city_id}. Run `make boundary {city_id}` first.',
+            file=sys.stderr,
+        )
+        return fc
+    before = len(fc['features'])
+    clipped = clip_to_geometry(fc, boundary_geom)
+    print(f'  clipped to boundary: dropped {before - len(clipped["features"])} of '
+          f'{before} {noun} outside {city_id}')
+    return clipped
+
+
+def _prepare_out_file(out_dir: Path, city_id: str, filename: str) -> Path:
+    """Resolve <out_dir>/<city_id>/<filename> and ensure its parent dir exists."""
+    out_file = out_dir / city_id / filename
+    out_file.parent.mkdir(parents=True, exist_ok=True)
+    return out_file
+
+
 def _fetch_stores_one(
     city_id: str,
     dataset_id: str,
@@ -135,24 +163,12 @@ def _fetch_stores_one(
     # admin area server-side; Geoapify (its own city boundary) and Overture (bbox)
     # leak places outside the zone the front end draws. This is the single
     # source-agnostic gate that keeps every provider inside the clip zone.
-    boundary_geom = load_boundary_geometry(_BOUNDARY_DIR, city_id)
-    if boundary_geom is not None:
-        before = len(final_geojson['features'])
-        final_geojson = clip_to_geometry(final_geojson, boundary_geom)
-        dropped = before - len(final_geojson['features'])
-        print(f'  clipped to boundary: dropped {dropped} of {before} features outside {city_id}')
-    else:
-        print(
-            f'Warning: no boundary at {_BOUNDARY_DIR / city_id / "boundary.geojson"}; '
-            f'skipping clip for {city_id}. Run `make boundary {city_id}` first.',
-            file=sys.stderr,
-        )
+    final_geojson = _clip_to_city_or_warn(final_geojson, city_id)
 
     check_guard(final_geojson, city_id, dataset_id, dataset['min_features'])
 
     # Nested layout: <out-dir>/<city>/<dataset>.geojson  (e.g. data/places/paris/food.geojson)
-    out_file = out_dir / city_id / f'{dataset_id}.geojson'
-    out_file.parent.mkdir(parents=True, exist_ok=True)
+    out_file = _prepare_out_file(out_dir, city_id, f'{dataset_id}.geojson')
 
     _check_drop_guard(final_geojson, out_file, city_id, dataset_id)
     print_counts(final_geojson, city_id, dataset_id)
@@ -214,8 +230,7 @@ def cmd_fetch_boundary(args: argparse.Namespace) -> None:
     feature = fetch_boundary(city)
 
     # Nested layout: <out-dir>/<city>/boundary.geojson  (e.g. data/boundaries/paris/boundary.geojson)
-    out_file = out_dir / city_id / 'boundary.geojson'
-    out_file.parent.mkdir(parents=True, exist_ok=True)
+    out_file = _prepare_out_file(out_dir, city_id, 'boundary.geojson')
     write_geojson(feature, str(out_file))
 
 
@@ -238,23 +253,11 @@ def cmd_fetch_trees(args: argparse.Namespace) -> None:
     # Clip to the committed boundary polygon — the export includes Paris-owned
     # cemeteries (Pantin, Bagneux, Thiais) that sit outside the admin area the
     # front end draws.
-    boundary_geom = load_boundary_geometry(_BOUNDARY_DIR, city_id)
-    if boundary_geom is not None:
-        before = len(fc['features'])
-        fc = clip_to_geometry(fc, boundary_geom)
-        print(f'  clipped to boundary: dropped {before - len(fc["features"])} of '
-              f'{before} trees outside {city_id}')
-    else:
-        print(
-            f'Warning: no boundary at {_BOUNDARY_DIR / city_id / "boundary.geojson"}; '
-            f'skipping clip for {city_id}. Run `make boundary {city_id}` first.',
-            file=sys.stderr,
-        )
+    fc = _clip_to_city_or_warn(fc, city_id, noun='trees')
 
     check_guard(fc, city_id, 'trees', _TREES_MIN)
 
-    out_file = out_dir / city_id / 'trees.geojson'
-    out_file.parent.mkdir(parents=True, exist_ok=True)
+    out_file = _prepare_out_file(out_dir, city_id, 'trees.geojson')
 
     _check_drop_guard(fc, out_file, city_id, 'trees')
 
@@ -281,23 +284,11 @@ def cmd_fetch_transit(args: argparse.Namespace) -> None:
 
     # Clip to the committed boundary — the source is region-wide (Île-de-France),
     # so this keeps only the ~297 stations inside Paris intra-muros.
-    boundary_geom = load_boundary_geometry(_BOUNDARY_DIR, city_id)
-    if boundary_geom is not None:
-        before = len(fc['features'])
-        fc = clip_to_geometry(fc, boundary_geom)
-        print(f'  clipped to boundary: dropped {before - len(fc["features"])} of '
-              f'{before} stations outside {city_id}')
-    else:
-        print(
-            f'Warning: no boundary at {_BOUNDARY_DIR / city_id / "boundary.geojson"}; '
-            f'skipping clip for {city_id}. Run `make boundary {city_id}` first.',
-            file=sys.stderr,
-        )
+    fc = _clip_to_city_or_warn(fc, city_id, noun='stations')
 
     check_guard(fc, city_id, 'transit', _TRANSIT_MIN)
 
-    out_file = out_dir / city_id / 'transit.geojson'
-    out_file.parent.mkdir(parents=True, exist_ok=True)
+    out_file = _prepare_out_file(out_dir, city_id, 'transit.geojson')
 
     _check_drop_guard(fc, out_file, city_id, 'transit')
 

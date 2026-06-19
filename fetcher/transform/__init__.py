@@ -1,1 +1,1 @@
-"""Feature transforms: conflation, OSM/Overture merge, GeoJSON output."""
+"""Feature transforms: source-agnostic aggregation, boundary clip, GeoJSON output."""
