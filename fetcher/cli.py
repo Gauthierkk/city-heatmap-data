@@ -23,6 +23,7 @@ from .providers.overpass import DATASETS, dataset_by_id
 from .providers.boundary import fetch_boundary
 from .providers.trees import fetch_trees, to_columnar
 from .providers.transit import fetch_transit
+from .providers.transit_lines import fetch_transit_lines
 from .providers.pharmacies import fetch_pharmacies
 from .transform.aggregate import aggregate
 from .transform.clip import clip_to_geometry, load_boundary_geometry
@@ -47,6 +48,9 @@ _TRANSIT_MIN = 200
 
 # Minimum Paris pharmacies expected (~987 in the register) — guards a partial fetch.
 _PHARMACY_MIN = 700
+
+# Minimum metro/rer/tram line segments inside the Paris bbox — guards a partial fetch.
+_TRANSIT_LINES_MIN = 30
 
 # Drop guard: refuse to write if the new aggregated total is below this fraction
 # of the committed file's feature count (protects against a silent provider outage).
@@ -336,6 +340,36 @@ def cmd_fetch_pharmacies(args: argparse.Namespace) -> None:
     write_geojson(fc, str(out_file))
 
 
+def cmd_fetch_transit_lines(args: argparse.Namespace) -> None:
+    """Fetch the Paris transit-line geometry (metro/rer/tram) and write it.
+
+    Separate from `fetch-transit`: a LineString network coloured per line, drawn
+    under the station dots. No boundary clip (point-in-polygon doesn't apply to
+    lines — the map clips the overflow at view time), no aggregation.
+    """
+    city_id = args.city or 'paris'
+    city = city_by_id(city_id)
+    out_dir = Path(args.out_dir).resolve() if args.out_dir else _DATA_DIR
+
+    fc = fetch_transit_lines(city)
+
+    check_guard(fc, city_id, 'transit-lines', _TRANSIT_LINES_MIN)
+
+    out_file = _prepare_out_file(out_dir, city_id, 'transit-lines.geojson')
+    _check_drop_guard(fc, out_file, city_id, 'transit-lines')
+
+    # Per-mode segment count.
+    counts: dict[str, int] = {}
+    for f in fc['features']:
+        m = f['properties']['mode']
+        counts[m] = counts.get(m, 0) + 1
+    print(f'Fetched {len(fc["features"])} line segments for {city_id}/transit-lines:')
+    for m, cnt in sorted(counts.items(), key=lambda x: -x[1]):
+        print(f'  {m:<14} {cnt}')
+
+    write_geojson(fc, str(out_file))
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog='python3 -m fetcher',
@@ -483,6 +517,24 @@ def build_parser() -> argparse.ArgumentParser:
         help='Write GeoJSON file here instead of the default data/places/ folder',
     )
 
+    # --- fetch-transit-lines ---
+    p_transit_lines = sub.add_parser(
+        'fetch-transit-lines',
+        help='Refresh the Paris transit-line geometry (metro/rer/tram) from IDF Mobilités (Paris-only)',
+    )
+    p_transit_lines.add_argument(
+        'city',
+        nargs='?',
+        default=None,
+        help='City id (default: paris). Only paris has transit-line geometry wired up.',
+    )
+    p_transit_lines.add_argument(
+        '--out-dir',
+        default=None,
+        metavar='DIR',
+        help='Write GeoJSON file here instead of the default data/places/ folder',
+    )
+
     return parser
 
 
@@ -501,6 +553,8 @@ def main(argv: list[str] | None = None) -> None:
             cmd_fetch_transit(args)
         elif args.command == 'fetch-pharmacies':
             cmd_fetch_pharmacies(args)
+        elif args.command == 'fetch-transit-lines':
+            cmd_fetch_transit_lines(args)
         else:
             parser.print_help()
             sys.exit(1)

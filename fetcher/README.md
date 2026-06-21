@@ -145,6 +145,25 @@ lines are dropped — Gare de Lyon above keeps M1/M14/RER A/RER D, not Transilie
 R); `categories` is left untouched. The pictogram SVGs themselves live in the
 front-end repo (`public/lines/`), not here.
 
+## Transit-line geometry (separate pipeline)
+
+`fetch-transit-lines` (`providers/transit_lines.py`) fetches the **route geometry**
+of the rail network from IDF Mobilités'
+[`traces-du-reseau-ferre-idf`](https://data.iledefrance-mobilites.fr/explore/dataset/traces-du-reseau-ferre-idf/),
+so the front end can draw the lines beneath the station dots. One `LineString`
+per segment; we keep **metro + RER + tram** (mainline TER/TRAIN, navette, cable
+dropped) and only the segments with a vertex inside the Paris bbox (the map clips
+the overflow at view time — there is no polygon clip, which doesn't apply to
+lines). Each feature carries its official colour straight from the source:
+
+```jsonc
+"properties": { "mode": "metro", "line": "6", "color": "#6eca97" }
+```
+
+`color` is the dataset's `colourweb_hexa`. Output is a FeatureCollection of
+LineStrings (`<city>/transit-lines.geojson`), guarded against a partial fetch
+(`< 30` segments). Paris-only.
+
 ## Pharmacies (separate pipeline)
 
 The Paris **pharmacy** layer is another separate, Paris-only pipeline
@@ -221,6 +240,10 @@ python3 -m fetcher fetch-trees paris --out-dir ../city-heatmap-front/public/data
 python3 -m fetcher fetch-transit
 python3 -m fetcher fetch-transit paris --out-dir ../city-heatmap-front/public/data
 
+# Fetch the Paris transit-line geometry (Paris-only, separate pipeline)
+python3 -m fetcher fetch-transit-lines
+python3 -m fetcher fetch-transit-lines paris --out-dir ../city-heatmap-front/public/data
+
 # Fetch the Paris pharmacy layer (Paris-only, separate pipeline)
 python3 -m fetcher fetch-pharmacies
 python3 -m fetcher fetch-pharmacies paris --out-dir ../city-heatmap-front/public/data
@@ -241,6 +264,7 @@ Nested per city — `<out-dir>/<city>/<name>.geojson`:
 | `fetch-boundary <city>` | `<city>/boundary.geojson` |
 | `fetch-trees paris` | `<city>/trees.geojson` (`trees-columnar-v1`: species table + parallel coord/index arrays, Paris-only) |
 | `fetch-transit paris` | `<city>/transit.geojson` (FeatureCollection, Paris-only) |
+| `fetch-transit-lines paris` | `<city>/transit-lines.geojson` (LineString network coloured per line, Paris-only) |
 | `fetch-pharmacies paris` | `<city>/pharmacy.geojson` (FeatureCollection, `shop=pharmacy`, Paris-only) |
 
 ### Guards
@@ -264,14 +288,15 @@ python3 -m fetcher fetch-boundary nyc    --force --out-dir ../city-heatmap-front
 python3 -m fetcher fetch-boundary austin --force --out-dir ../city-heatmap-front/public/data
 ```
 
-The **trees**, **transit** and **pharmacies** layers are likewise excluded from
-the weekly job (they change slowly and are Paris-only) — refresh by hand when
-needed:
+The **trees**, **transit**, **transit-lines** and **pharmacies** layers are
+likewise excluded from the weekly job (they change slowly and are Paris-only) —
+refresh by hand when needed:
 
 ```bash
-python3 -m fetcher fetch-trees      paris --out-dir ../city-heatmap-front/public/data
-python3 -m fetcher fetch-transit    paris --out-dir ../city-heatmap-front/public/data
-python3 -m fetcher fetch-pharmacies paris --out-dir ../city-heatmap-front/public/data
+python3 -m fetcher fetch-trees         paris --out-dir ../city-heatmap-front/public/data
+python3 -m fetcher fetch-transit       paris --out-dir ../city-heatmap-front/public/data
+python3 -m fetcher fetch-transit-lines paris --out-dir ../city-heatmap-front/public/data
+python3 -m fetcher fetch-pharmacies    paris --out-dir ../city-heatmap-front/public/data
 ```
 
 ## Sync notes
