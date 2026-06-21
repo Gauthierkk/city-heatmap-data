@@ -115,13 +115,20 @@ within an 800 m radius (so a split hub like Gare du Nord's metro/RER zones unify
 but the two distant "Malesherbes" stay separate), positioned at the mean
 coordinate. The result is clipped to the Paris boundary (~297 stations).
 
-Each station carries a **list** of categories (no address):
+Each station carries a **list** of categories (no address) plus its actual
+**lines**:
 
 ```jsonc
 "properties": {
   "id": "transit/73626",
   "name": "Gare de Lyon",
-  "categories": ["major_station", "metro", "rer", "train"]
+  "categories": ["major_station", "metro", "rer", "train"],
+  "lines": [
+    { "mode": "metro", "line": "1",  "picto": "metro_1.svg" },
+    { "mode": "metro", "line": "14", "picto": "metro_14.svg" },
+    { "mode": "rer",   "line": "A",  "picto": "RER_A.svg" },
+    { "mode": "rer",   "line": "D",  "picto": "RER_D.svg" }
+  ]
 }
 ```
 
@@ -129,6 +136,14 @@ Each station carries a **list** of categories (no address):
 `cable`); the six Paris mainline terminals (Nord, Est, Lyon, Austerlitz,
 Montparnasse, Saint-Lazare — Bercy excluded) also get `major_station`. A guard
 refuses to write below 200 stations.
+
+`lines` is the deduped, ordered set of lines the station serves — each with its
+mode, designation (`indice_lig`), and the official IDFM pictogram filename
+(`picto`, e.g. `metro_1.svg`) the front end renders as the line bullet. **At a
+major station, `lines` keeps only metro + RER** (the mainline Transilien/`train`
+lines are dropped — Gare de Lyon above keeps M1/M14/RER A/RER D, not Transilien
+R); `categories` is left untouched. The pictogram SVGs themselves live in the
+front-end repo (`public/lines/`), not here.
 
 ## Pharmacies (separate pipeline)
 
