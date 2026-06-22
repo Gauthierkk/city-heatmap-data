@@ -1,96 +1,88 @@
 # city-heatmap-data
 
-Weekly data-refresh **worker** for [city-heatmap-front](../city-heatmap-front).
-Keeps the fetch logic (Python) fully separate from the always-on GitHub Pages
-front end. This repo runs on a local server; once a week it regenerates the
-store GeoJSON, writes it into the front-end repo's `public/data/`, and commits +
-pushes so GitHub Pages redeploys. No frontend code, no servers to expose.
+Python worker that generates the pre-baked GeoJSON the
+[`city-heatmap-front`](../city-heatmap-front) app serves. It queries OpenStreetMap
+(Overpass) plus a few other open-data providers, normalises everything into one
+compact schema, and writes per-city GeoJSON. No front-end code, nothing to expose.
 
-## Layout
+## Quick start
 
-Both repos are cloned as **siblings** under one parent (locally and on the
-server):
+```bash
+uv sync                      # Python 3.11+  (or: pip install -e .)
 
+# generate Paris store + boundary data into a local folder (→ ./out/<city>/<name>.geojson) …
+uv run city-heatmap-fetch fetch-stores   paris food    --out-dir ./out
+uv run city-heatmap-fetch fetch-stores   paris fitness --out-dir ./out
+uv run city-heatmap-fetch fetch-boundary paris         --out-dir ./out
+
+# … then copy into the app at the paths src/cities.ts expects (note the boundary
+# is flattened from <city>/boundary.geojson to <city>.geojson):
+cp ./out/paris/food.geojson ./out/paris/fitness.geojson ../city-heatmap-front/data/places/paris/
+cp ./out/paris/boundary.geojson                          ../city-heatmap-front/data/boundaries/paris.geojson
 ```
-city-heatmap/
-  ├── city-heatmap-front/   ← app + committed data; gets pushed to (deploy-key write access)
-  └── city-heatmap-data/    ← this repo: Python `fetcher/` module + weekly-refresh.sh
-```
 
-The front end loads data same-origin from `public/data/<city>/{food,fitness,boundary}.geojson`,
-so the data must live in the front-end repo — this worker only *generates* it.
+`make load paris` runs the whole Paris set (stores + boundary + the Paris-only
+layers) in one go. See **[fetcher/README.md](fetcher/README.md)** for every
+command, provider details, guards, and the output schema.
 
-## How it works
+> **The two repos are independent and, in production, run on separate machines.**
+> Generated data reaches the app by **manual copy / upload** into the app repo's
+> `data/` tree - there is no automated pipeline, sync, or shared filesystem. The
+> `--out-dir` flag exists so the output is decoupled from any sibling path. Note
+> the app serves data from its repo-root `data/` folder (not `public/data/`):
+> store layers at `data/places/<city>/`, boundaries at `data/boundaries/<city>.geojson`.
 
-`weekly-refresh.sh` (cron, weekly):
+## What it generates - and what's city-specific
 
-1. Takes a single-instance lock.
-2. `git -C ../city-heatmap-front pull --ff-only` (the worker only ever touches
-   `public/data/`; humans own the code, so this stays fast-forward).
-3. `python3 -m fetcher fetch-stores --all --out-dir ../city-heatmap-front/public/data`
-   — Each file is built by querying every provider for that city+dataset and
-   merging into one duplicate-free set; ~10 s between rounds. **nyc and austin
-   are soft-deprecated**: their committed data is kept but `--all` skips them, so
-   only the paris × food/fitness files refresh. Pass `--force` to refresh the
-   deprecated cities too.
-4. If `public/data` changed, commit `chore(data): weekly refresh <date>` and
-   push `main`; otherwise exit quietly (deterministic, timestamp-free output +
-   per-dataset guards mean unchanged weeks produce no commit/redeploy).
+| Output | Cities | Source |
+|---|---|---|
+| `places/<city>/food.geojson`, `fitness.geojson` | **any city** | OSM/Overpass (+ Overture, Geoapify) |
+| `<city>/boundary.geojson` | **any city** | OSM admin relation |
+| `places/paris/trees.geojson` | **Paris only** | opendata.paris.fr `les-arbres` |
+| `places/paris/transit.geojson` | **Paris only** | IDF Mobilités `emplacement-des-gares-idf` |
+| `places/paris/transit-lines.geojson` | **Paris only** | IDF Mobilités `traces-du-reseau-ferre-idf` |
+| `places/paris/pharmacy.geojson` | **Paris only** | Région Île-de-France pharmacy register |
 
-Boundaries are **not** in the weekly job (they rarely change) — refresh by hand:
-`python3 -m fetcher fetch-boundary <city> --out-dir ../city-heatmap-front/public/data`
-(deprecated cities need `--force` here too).
+The food/fitness pipeline can also pull **SIRENE** (data.gouv) - a **France-only**
+enrichment that auto-skips outside France.
 
-Four Paris-only extra layers run as separate pipelines and are also excluded from
-the weekly job — refresh by hand:
-- **street trees** (`fetch-trees`; a Point FeatureCollection carrying each tree's species in French + English, not the store schema):
-  `python3 -m fetcher fetch-trees paris --out-dir ../city-heatmap-front/public/data`.
-- **public transit** (`fetch-transit`; stations with a `categories` list + per-line bullets):
-  `python3 -m fetcher fetch-transit paris --out-dir ../city-heatmap-front/public/data`.
-- **transit-line geometry** (`fetch-transit-lines`; metro/RER/tram route LineStrings coloured per line):
-  `python3 -m fetcher fetch-transit-lines paris --out-dir ../city-heatmap-front/public/data`.
-- **pharmacies** (`fetch-pharmacies`; the Paris pharmacy register, normal store schema with `shop=pharmacy`):
-  `python3 -m fetcher fetch-pharmacies paris --out-dir ../city-heatmap-front/public/data`.
+So **food, fitness and boundary work for any city**; trees, transit,
+transit-lines and pharmacies are wired to Paris / Île-de-France datasets only.
 
-See [fetcher/README.md](fetcher/README.md) for the fetch package's commands, guards,
-Overture/duckdb details, and front-end sync notes.
+## Use your own city
 
-## One-time server setup
+1. Add a `CityDef` to [`fetcher/cities.py`](fetcher/cities.py): the `wikidata`
+   area id, OSM `relation` id, `bbox`, boundary `tolerance_deg` + plausible
+   `area_range`, and a `geoapify_query`. Keep it in sync with the app's
+   `src/cities.ts`.
+2. Generate: `fetch-stores <city> food`, `fetch-stores <city> fitness`,
+   `fetch-boundary <city>`.
+3. Copy the files into the app repo's `data/` and register the city in
+   `src/cities.ts`.
+4. Skip the Paris-only commands (`fetch-trees` / `fetch-transit` /
+   `fetch-transit-lines` / `fetch-pharmacies`) - they have no equivalent
+   elsewhere yet.
 
-1. **Clone both repos** as siblings under one parent.
-2. **Dependencies & keys**: Python 3.11+, plus:
-   - `duckdb` for the Overture fitness provider:
-     `pip3 install duckdb --user --break-system-packages` (skip with `--no-overture`).
-   - `GEOAPIFY_KEY` for the Geoapify provider (food + fitness) — copy `.env.example`
-     to `.env` and fill it in (`.env` is gitignored), or export the var (skip with
-     `--no-geoapify`). Free key: https://myprojects.geoapify.com/.
+## Dependencies & keys
 
-   Any provider whose dependency/key is missing is skipped with a warning; the run
-   still proceeds on the others as long as OSM (the backbone) returns data.
-3. **SSH deploy key** (so the worker can push the front-end repo):
-   - `ssh-keygen -t ed25519 -f ~/.ssh/city-heatmap-front -C "city-heatmap data-bot"`
-   - Add the **public** key to the `city-heatmap-front` GitHub repo →
-     **Settings → Deploy keys**, with **Allow write access**.
-   - Pin it via `~/.ssh/config`:
-     ```
-     Host github-city-heatmap-front
-       HostName github.com
-       User git
-       IdentityFile ~/.ssh/city-heatmap-front
-       IdentitiesOnly yes
-     ```
-   - Point the front-end clone's remote at the alias:
-     `git -C ../city-heatmap-front remote set-url origin github-city-heatmap-front:<user>/city-heatmap-front.git`
-4. **Commit identity** for the bot (local to the front-end clone):
-   ```bash
-   git -C ../city-heatmap-front config user.name  "city-heatmap data-bot"
-   git -C ../city-heatmap-front config user.email "data-bot@users.noreply.github.com"
-   ```
-5. **Cron** (weekly, e.g. Sundays 04:00):
-   ```cron
-   0 4 * * 0 /path/to/city-heatmap/city-heatmap-data/weekly-refresh.sh >> /path/to/refresh.log 2>&1
-   ```
+- **Python 3.11+** (`uv sync`, or `pip install -e .`). OSM, boundary and the
+  Paris open-data layers are stdlib-only.
+- **`duckdb`** - only for the Overture (fitness) and SIRENE providers; installed
+  by `uv sync`. Skip with `--no-overture` / `--no-sirene`.
+- **`GEOAPIFY_KEY`** - only for the Geoapify provider; put it in `.env` (copy
+  `.env.example`) or export it. Skip with `--no-geoapify`. Free key:
+  <https://myprojects.geoapify.com/>.
 
-Verify the wiring before trusting cron: `ssh -T github-city-heatmap-front`
-should authenticate, then run `./weekly-refresh.sh` once by hand and confirm a
-commit lands and the GitHub Pages deploy goes green.
+Any provider whose key/dependency is missing is **skipped with a warning**; the
+run still proceeds as long as OSM (the backbone) returns data.
+
+## Refreshing the data (optional automation)
+
+Re-run the fetch commands whenever you want fresh data and copy the output to
+wherever the app is hosted. Output is timestamp-free and sorted, and per-dataset
+guards refuse partial results, so re-runs only change files that actually changed.
+
+`weekly-refresh.sh` is a **local, same-machine convenience** that regenerates the
+store data straight into a sibling app clone - handy if you keep both repos on one
+box. It is *not* the production path (the repos are independent); treat it as
+scaffolding and adapt it to your own deploy and schedule.

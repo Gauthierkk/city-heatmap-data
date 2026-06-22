@@ -1,7 +1,7 @@
 """Source-agnostic aggregation of features from N providers into one deduped set.
 
 Replaces the old pairwise conflate()/merge_fitness() pair. Every provider is
-treated identically — the aggregator NEVER ranks osm/overture/geoapify.
+treated identically - the aggregator NEVER ranks osm/overture/geoapify.
 
 Two features are the same business when:
   1. they are within `radius_m` of each other, AND
@@ -11,8 +11,8 @@ Matching is across all `shop` types, since the same venue may be typed
 differently by different sources (e.g. gym vs yoga).
 
 For each cluster of duplicates we keep ONE representative:
-  - the most COMPLETE record wins — score = (name? ) + (#address subfields) + (shop?)
-  - ties broken by lowest `id` (lexicographic) — deterministic, source-neutral
+  - the most COMPLETE record wins - score = (name? ) + (#address subfields) + (shop?)
+  - ties broken by lowest `id` (lexicographic) - deterministic, source-neutral
 Then we BACKFILL the representative's missing `name` / address subfields with the
 most-detailed value found anywhere in the cluster (longest non-empty string,
 tie-break by id). No provider preference enters anywhere.
@@ -33,7 +33,7 @@ from .geojson_io import ADDRESS_FIELDS, is_named
 # Max distance (m) for two features to be considered the same place.
 DEFAULT_RADIUS_M = 100.0
 
-# Spatial bucket size (degrees) — ~9 km at mid-latitudes; one bucket in each
+# Spatial bucket size (degrees) - ~9 km at mid-latitudes; one bucket in each
 # direction covers the merge radius comfortably.
 _BUCKET_DEG = 0.1
 
@@ -151,7 +151,7 @@ def aggregate(
     """Merge several FeatureCollections into one deduped, source-agnostic set.
 
     cross_type=False (default): two records merge only if they share the same
-    `shop` type — so a coarse-category source can't overwrite a finer one
+    `shop` type - so a coarse-category source can't overwrite a finer one
     (e.g. Geoapify 'bakery' must not absorb OSM 'pastry'). Use this for food.
 
     cross_type=True: match across types, because the same venue is legitimately
@@ -165,13 +165,13 @@ def aggregate(
 
     # Drop unnamed places from every source up front. They never merge with
     # anything (an unnamed feature always forms its own singleton cluster), and
-    # an entry with no name isn't useful to show — so remove them outright.
+    # an entry with no name isn't useful to show - so remove them outright.
     incoming = len(all_features)
     all_features = [f for f in all_features if is_named(f)]
     dropped_unnamed = incoming - len(all_features)
 
     # Sort by id up front so clustering is independent of provider order and of
-    # each provider's (not-guaranteed-stable) internal ordering — otherwise a
+    # each provider's (not-guaranteed-stable) internal ordering - otherwise a
     # reshuffle from Overpass/Geoapify could churn the committed file week to week.
     all_features.sort(key=lambda f: f['properties']['id'])
 

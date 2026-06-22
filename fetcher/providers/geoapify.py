@@ -13,9 +13,9 @@ offset paging fetches each place once: credits = places / 20 (the floor), and
 the API clips to the city polygon server-side so no local filtering is needed.
 
 Coverage notes (from Geoapify's live category taxonomy):
-  - Food: rich — commercial.supermarket / convenience and the
+  - Food: rich - commercial.supermarket / convenience and the
     commercial.food_and_drink.* leaves map cleanly onto our canonical types.
-  - Fitness: sparse — Geoapify only exposes sport.fitness (gym / fitness_centre)
+  - Fitness: sparse - Geoapify only exposes sport.fitness (gym / fitness_centre)
     and sport.dojo (martial arts). It has NO yoga / pilates / dance / climbing
     categories, so Geoapify mainly adds gyms + dojos. sport.fitness.fitness_station
     is OUTDOOR equipment and is excluded.
@@ -73,7 +73,7 @@ _CATEGORY_TO_TYPE: dict[str, str] = {
 # Categories that look mapped but must be dropped (more specific than their parent).
 _EXCLUDE: frozenset[str] = frozenset({'sport.fitness.fitness_station'})
 
-# Categories to request per dataset (only what we can map — keeps credits low).
+# Categories to request per dataset (only what we can map - keeps credits low).
 _REQUEST_CATEGORIES: dict[str, list[str]] = {
     'food': [c for c in _CATEGORY_TO_TYPE if c.startswith('commercial.')],
     'fitness': ['sport.fitness', 'sport.dojo'],
@@ -132,7 +132,7 @@ def _fetch_boundary(categories: str, place_id: str, key: str) -> dict[str, dict[
         if len(feats) < _LIMIT:
             return out
         offset += _LIMIT
-    print(f'  geoapify: WARNING hit pagination guard ({_MAX_PAGES} pages) — '
+    print(f'  geoapify: WARNING hit pagination guard ({_MAX_PAGES} pages) - '
           'results may be truncated.', file=sys.stderr)
     return out
 
@@ -141,7 +141,7 @@ def fetch_geoapify(city: CityDef, dataset_id: str) -> dict[str, Any]:
     """Provider entry point: return a normalised FeatureCollection for city+dataset."""
     key = config.get_geoapify_key()
     if not key:
-        print('  geoapify: GEOAPIFY_KEY not set — skipping provider.', file=sys.stderr)
+        print('  geoapify: GEOAPIFY_KEY not set - skipping provider.', file=sys.stderr)
         return {'type': 'FeatureCollection', 'features': []}
 
     categories = _REQUEST_CATEGORIES.get(dataset_id)
@@ -151,11 +151,11 @@ def fetch_geoapify(city: CityDef, dataset_id: str) -> dict[str, Any]:
     query = city.geoapify_query or city.name
     place_id = _resolve_place_id(query, key)
     if not place_id:
-        print(f'  geoapify: could not resolve boundary for {query!r} — '
+        print(f'  geoapify: could not resolve boundary for {query!r} - '
               f'skipping {city.id}/{dataset_id}.', file=sys.stderr)
         return {'type': 'FeatureCollection', 'features': []}
 
-    print(f'Querying Geoapify — {city.id}/{dataset_id} (place:{place_id[:12]}…) ...')
+    print(f'Querying Geoapify - {city.id}/{dataset_id} (place:{place_id[:12]}…) ...')
     raw = _fetch_boundary(','.join(categories), place_id, key)
 
     features: list[dict[str, Any]] = []

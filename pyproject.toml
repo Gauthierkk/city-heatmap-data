@@ -4,7 +4,7 @@ version = "0.1.0"
 description = "Weekly data-refresh worker for city-heatmap: fetches store + boundary GeoJSON from Overpass / OSM (+ Overture)."
 requires-python = ">=3.11"
 # OSM/Overpass, Geoapify, and boundary fetching are stdlib-only. duckdb backs the
-# Parquet-querying providers — Overture (fitness, S3) and SIRENE (Paris food, data.gouv).
+# Parquet-querying providers - Overture (fitness, S3) and SIRENE (Paris food, data.gouv).
 # Both import it lazily, so --no-overture / --no-sirene still work if it's absent.
 dependencies = [
     "duckdb>=1.0",

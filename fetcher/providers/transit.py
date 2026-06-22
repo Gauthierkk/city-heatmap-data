@@ -1,4 +1,4 @@
-"""Paris public-transit fetch — Île-de-France rail stations (`emplacement-des-gares-idf`).
+"""Paris public-transit fetch - Île-de-France rail stations (`emplacement-des-gares-idf`).
 
 A SEPARATE pipeline (like trees), with its own minimal output format. The source
 is the IDF Mobilités "gares et stations du réseau ferré" dataset on the same
@@ -9,14 +9,14 @@ unifies a multimodal hub's platforms) at the station's mean coordinate.
 
 Each station carries a **list** of categories (no address): a metro+RER hub is
 `["metro","rer"]`. The six Paris mainline terminals (Nord, Est, Lyon, Austerlitz,
-Montparnasse, Saint-Lazare — Bercy excluded) get an extra `"major_station"`
+Montparnasse, Saint-Lazare - Bercy excluded) get an extra `"major_station"`
 category, so they form their own band on top of their modes.
 
-Each station also carries `lines` — the actual lines it serves, each with its
+Each station also carries `lines` - the actual lines it serves, each with its
 canonical mode, its designation (`indice_lig`: `1`, `A`, `T3a`) and the official
 IDFM pictogram filename (e.g. `METRO_1.svg`) the front end renders as the
 authentic coloured bullet. At a **major station** the `lines` list keeps only
-metro + RER lines (the mainline `TRAIN`/Transilien lines are dropped) — the
+metro + RER lines (the mainline `TRAIN`/Transilien lines are dropped) - the
 `categories` list above is left untouched.
 
 PARIS-ONLY semantics like the other Paris-specific providers: it returns every
@@ -69,7 +69,7 @@ _MODE_TO_CATEGORY: dict[str, str] = {
     'CABLE': 'cable',
 }
 
-# The six Paris mainline terminals get their own category (Bercy excluded — a
+# The six Paris mainline terminals get their own category (Bercy excluded - a
 # small secondary terminus). Matched case-insensitively against `nom_zdc`.
 _MAJOR_CATEGORY = 'major_station'
 _MAJOR_STATIONS: frozenset[str] = frozenset({
@@ -97,7 +97,7 @@ def _categories(name: str | None, modes: set[str]) -> list[str]:
 
 
 # Display order of a station's lines: by mode band, then by designation (metro
-# numerically — 1, 2, … 14, then `3bis`/`7bis` — others alphabetically).
+# numerically - 1, 2, … 14, then `3bis`/`7bis` - others alphabetically).
 _LINE_MODE_ORDER: dict[str, int] = {
     'metro': 0, 'rer': 1, 'tram': 2, 'train': 3, 'val': 4, 'cable': 5,
 }
@@ -145,7 +145,7 @@ def fetch_transit(city: CityDef) -> dict[str, Any]:
         return empty
 
     url = f'{_EXPORT_URL}?{urllib.parse.urlencode({"select": _SELECT})}'
-    print(f'Querying IDF Mobilités (emplacement-des-gares-idf) — {city.id} ...')
+    print(f'Querying IDF Mobilités (emplacement-des-gares-idf) - {city.id} ...')
     rows = get_json(url, timeout=_TIMEOUT_S)
 
     print(f'  Retrieved {len(rows)} station-line records for {city.id}', file=sys.stderr)

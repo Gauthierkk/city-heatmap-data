@@ -72,7 +72,7 @@ def normalise_food(tags: dict[str, str]) -> str | None:
 # Fitness dataset
 # ---------------------------------------------------------------------------
 
-# Fitness features reuse the `shop` property key (shop: 'yoga') — deliberate
+# Fitness features reuse the `shop` property key (shop: 'yoga') - deliberate
 # quirk so StoreProperties, MapView's ['get','shop'] expressions, and
 # distanceField.ts stay untouched.
 
@@ -120,7 +120,7 @@ def _classify_by_sport(tags: dict[str, str]) -> str | None:
         return 'dance'
     if 'fitness' in sports:
         return 'gym'
-    return None  # rowing, pétanque, tennis, swimming, etc. — filter out
+    return None  # rowing, pétanque, tennis, swimming, etc. - filter out
 
 
 def normalise_fitness(tags: dict[str, str]) -> str | None:
@@ -149,7 +149,7 @@ def normalise_fitness(tags: dict[str, str]) -> str | None:
     if by_sport is not None:
         return by_sport
 
-    # No recognised sport tag — fall back to leisure semantics.
+    # No recognised sport tag - fall back to leisure semantics.
     if leisure == 'fitness_centre':
         return 'gym'
     if leisure == 'dance':
@@ -165,7 +165,7 @@ def normalise_fitness(tags: dict[str, str]) -> str | None:
 # ---------------------------------------------------------------------------
 
 # Output files are named <city>/<dataset-id>.geojson (e.g. paris/food.geojson),
-# so the dataset id below doubles as the filename stem — no separate prefix.
+# so the dataset id below doubles as the filename stem - no separate prefix.
 DATASETS: dict[str, dict[str, Any]] = {
     'food': {
         'min_features': 100,

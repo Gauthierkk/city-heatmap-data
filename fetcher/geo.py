@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import math
 
-# Coordinate output precision. 6 dp ≈ 0.11 m — finer than any layer needs, and
+# Coordinate output precision. 6 dp ≈ 0.11 m - finer than any layer needs, and
 # the shared default every writer rounds to (the trees layer overrides to 4 dp).
 COORD_DP = 6
 

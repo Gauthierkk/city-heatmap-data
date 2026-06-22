@@ -22,7 +22,7 @@ def _dotenv() -> dict[str, str]:
     """Parse the repo-root .env into a dict. Missing file → empty dict.
 
     Supports plain `KEY=VALUE` lines; ignores blanks and `#` comments and strips
-    surrounding quotes. Not a full dotenv implementation — just enough for keys.
+    surrounding quotes. Not a full dotenv implementation - just enough for keys.
     """
     values: dict[str, str] = {}
     if not _ENV_FILE.exists():

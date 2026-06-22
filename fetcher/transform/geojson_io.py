@@ -7,7 +7,7 @@ Output format (one schema, defined here, used by every provider):
   - coordinates rounded to 6 decimal places
   - No `generated` timestamp (so unchanged weekly re-runs don't churn the file)
   - Compact JSON: json.dumps with separators=(',', ':')
-  - Provenance is intentionally NOT recorded — the merge is source-agnostic.
+  - Provenance is intentionally NOT recorded - the merge is source-agnostic.
 """
 
 from __future__ import annotations

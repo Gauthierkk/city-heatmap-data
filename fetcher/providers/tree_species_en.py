@@ -7,7 +7,7 @@ this module maps each distinct French name to its English common name.
 The map is keyed on the dataset's French names. A few values carry CSV-escaping
 artefacts (doubled quotes) or cultivar suffixes; `english_name()` normalises those
 before lookup. Anything genuinely unknown falls back to the French name unchanged
-(honest — better than a wrong guess), so the English field is always populated.
+(honest - better than a wrong guess), so the English field is always populated.
 """
 
 from __future__ import annotations
@@ -255,7 +255,7 @@ _FR_TO_EN: dict[str, str] = {
 
 # Cultivar/clone suffix stripped before lookup: a SPACE-separated quoted token at
 # the end (e.g. ``Aria edulis 'Magnifica'``). The leading ``\s+`` is what keeps an
-# internal apostrophe — ``Cyprès de l'Arizona`` — from being mistaken for one.
+# internal apostrophe - ``Cyprès de l'Arizona`` - from being mistaken for one.
 _CULTIVAR_SUFFIX = re.compile(r"\s+'[^']*'$")
 
 

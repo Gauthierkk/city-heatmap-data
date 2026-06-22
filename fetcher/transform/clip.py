@@ -7,7 +7,7 @@ clips only to a rectangular bbox. Both therefore leak places that sit outside th
 clip zone the front end draws.
 
 This module applies one final, source-agnostic point-in-polygon filter against
-the committed boundary GeoJSON — the same simplified polygon the app renders —
+the committed boundary GeoJSON - the same simplified polygon the app renders -
 so no provider can place a feature outside the zone.
 """
 

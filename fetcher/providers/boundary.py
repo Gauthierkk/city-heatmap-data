@@ -1,4 +1,4 @@
-"""Boundary fetcher — ports scripts/fetch-boundary.mjs faithfully.
+"""Boundary fetcher - ports scripts/fetch-boundary.mjs faithfully.
 
 Fetches a city's administrative boundary from OSM, simplifies it with
 Douglas-Peucker, validates the area, and writes a compact GeoJSON Feature
@@ -41,7 +41,7 @@ def _from_polygons_service(relation_id: int) -> dict[str, Any]:
 
 
 # ---------------------------------------------------------------------------
-# Fallback: Overpass — download member ways and stitch into rings
+# Fallback: Overpass - download member ways and stitch into rings
 # ---------------------------------------------------------------------------
 
 def _key(point: list[float]) -> str:

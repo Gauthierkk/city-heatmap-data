@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 #
-# weekly-refresh.sh — refresh the city-heatmap store data into a local folder.
+# weekly-refresh.sh - refresh the city-heatmap store data into a local folder.
 #
 # Runs from this worker repo (city-heatmap-data). It regenerates all six
 # GeoJSON store files into this repo's local data/ folder. Boundaries are NOT
-# part of the weekly job (they rarely change — refresh them manually when
+# part of the weekly job (they rarely change - refresh them manually when
 # needed), e.g.:
 #
 #     python3 -m fetcher fetch-boundary <city> --out-dir "$(pwd)/data"
@@ -39,4 +39,4 @@ echo "--- fetching all cities x datasets → $DATA_DIR ---"
 cd "$SCRIPT_DIR"
 python3 -m fetcher fetch-stores --all --out-dir "$DATA_DIR"
 
-echo "Done — data written to $DATA_DIR."
+echo "Done - data written to $DATA_DIR."

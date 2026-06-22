@@ -1,4 +1,4 @@
-"""City registry — mirrors src/cities.ts where relevant.
+"""City registry - mirrors src/cities.ts where relevant.
 
 Each entry contains only the fields needed by the data-fetch pipeline.
 Keep in sync with src/cities.ts whenever city ids, wikidata ids, or

@@ -1,10 +1,10 @@
 """Command-line interface for the fetcher package.
 
 Commands:
-  fetch-stores [city] [dataset]   — refresh store data from Overpass (+ Overture for fitness)
-  fetch-boundary [city]           — refresh city admin boundary from OSM
-  fetch-trees [city]              — refresh the Paris street-tree layer (Paris-only)
-  fetch-transit [city]            — refresh the Paris transit-station layer (Paris-only)
+  fetch-stores [city] [dataset]   - refresh store data from Overpass (+ Overture for fitness)
+  fetch-boundary [city]           - refresh city admin boundary from OSM
+  fetch-trees [city]              - refresh the Paris street-tree layer (Paris-only)
+  fetch-transit [city]            - refresh the Paris transit-station layer (Paris-only)
 
 Defaults: paris, food
 """
@@ -38,18 +38,18 @@ _DATA_ROOT = Path(__file__).resolve().parent.parent / 'data'
 _DATA_DIR = _DATA_ROOT / 'places'
 _BOUNDARY_DIR = _DATA_ROOT / 'boundaries'
 
-# Minimum trees expected (after clipping to the Paris boundary) — guards against a
+# Minimum trees expected (after clipping to the Paris boundary) - guards against a
 # partial/empty export. The raw dataset holds ~218k; clipping drops the Paris-owned
 # cemeteries outside the admin polygon, so this stays well below the live total.
 _TREES_MIN = 150_000
 
-# Minimum transit stations expected inside Paris (~297 live) — guards a partial fetch.
+# Minimum transit stations expected inside Paris (~297 live) - guards a partial fetch.
 _TRANSIT_MIN = 200
 
-# Minimum Paris pharmacies expected (~987 in the register) — guards a partial fetch.
+# Minimum Paris pharmacies expected (~987 in the register) - guards a partial fetch.
 _PHARMACY_MIN = 700
 
-# Minimum metro/rer/tram line segments inside the Paris bbox — guards a partial fetch.
+# Minimum metro/rer/tram line segments inside the Paris bbox - guards a partial fetch.
 _TRANSIT_LINES_MIN = 30
 
 # Drop guard: refuse to write if the new aggregated total is below this fraction
@@ -80,14 +80,14 @@ def _is_fetch_blocked(city_id: str, force: bool) -> bool:
 def _check_drop_guard(merged_geojson: dict, out_file: Path, city_id: str, dataset_id: str) -> None:
     """Refuse to write if the new total dropped below 70 % of the committed file."""
     if not out_file.exists():
-        return  # no committed baseline — nothing to check
+        return  # no committed baseline - nothing to check
     try:
         existing = json.loads(out_file.read_text())
         # Trees ship as `trees-columnar-v1` (no `features`; one entry per
         # coordinate); every other layer is a FeatureCollection.
         existing_count = len(existing.get('features') or existing.get('coordinates') or [])
     except Exception:
-        return  # can't read existing file — skip guard
+        return  # can't read existing file - skip guard
 
     new_count = len(merged_geojson.get('features') or merged_geojson.get('coordinates') or [])
     threshold = existing_count * _DROP_GUARD_FRACTION
@@ -95,7 +95,7 @@ def _check_drop_guard(merged_geojson: dict, out_file: Path, city_id: str, datase
         print(
             f'Drop guard triggered for {city_id}/{dataset_id}: '
             f'new total {new_count} < {_DROP_GUARD_FRACTION:.0%} of '
-            f'committed {existing_count} ({threshold:.0f}). Refusing to write — '
+            f'committed {existing_count} ({threshold:.0f}). Refusing to write - '
             'a provider may be down. Investigate, or narrow --providers and retry.',
             file=sys.stderr,
         )
@@ -150,7 +150,7 @@ def _fetch_stores_one(
         try:
             fc = provider.fetch(city, dataset_id)
         except Exception as exc:
-            # A secondary provider failing is non-fatal — log and carry on so the
+            # A secondary provider failing is non-fatal - log and carry on so the
             # run still produces data from the others.
             print(f'Warning: provider "{provider.name}" failed: {exc}', file=sys.stderr)
             continue
@@ -158,7 +158,7 @@ def _fetch_stores_one(
         if provider.name == 'osm' and fc.get('features'):
             osm_ok = True
 
-    # OSM is the comprehensive backbone — its min-features guard still applies.
+    # OSM is the comprehensive backbone - its min-features guard still applies.
     if not osm_ok:
         print(f'Refusing to write {city_id}/{dataset_id}: OSM returned no data.', file=sys.stderr)
         sys.exit(1)
@@ -245,7 +245,7 @@ def cmd_fetch_boundary(args: argparse.Namespace) -> None:
 def cmd_fetch_trees(args: argparse.Namespace) -> None:
     """Fetch the Paris tree layer, clip to the city boundary, and write it.
 
-    Separate from `fetch-stores`: no providers/aggregation/OSM backbone — one
+    Separate from `fetch-stores`: no providers/aggregation/OSM backbone - one
     authoritative source, one Point feature per tree carrying its species in
     French + English. Reuses the feature-based clip + guards since it is a normal
     FeatureCollection.
@@ -258,7 +258,7 @@ def cmd_fetch_trees(args: argparse.Namespace) -> None:
 
     fc = fetch_trees(city)
 
-    # Clip to the committed boundary polygon — the export includes Paris-owned
+    # Clip to the committed boundary polygon - the export includes Paris-owned
     # cemeteries (Pantin, Bagneux, Thiais) that sit outside the admin area the
     # front end draws.
     fc = _clip_to_city_or_warn(fc, city_id, noun='trees')
@@ -290,7 +290,7 @@ def cmd_fetch_transit(args: argparse.Namespace) -> None:
 
     fc = fetch_transit(city)
 
-    # Clip to the committed boundary — the source is region-wide (Île-de-France),
+    # Clip to the committed boundary - the source is region-wide (Île-de-France),
     # so this keeps only the ~297 stations inside Paris intra-muros.
     fc = _clip_to_city_or_warn(fc, city_id, noun='stations')
 
@@ -326,7 +326,7 @@ def cmd_fetch_pharmacies(args: argparse.Namespace) -> None:
 
     fc = fetch_pharmacies(city)
 
-    # Clip to the committed boundary — defensive (the register is Paris-only, but
+    # Clip to the committed boundary - defensive (the register is Paris-only, but
     # this keeps the layer consistent with the polygon the front end draws).
     fc = _clip_to_city_or_warn(fc, city_id, noun='pharmacies')
 
@@ -345,7 +345,7 @@ def cmd_fetch_transit_lines(args: argparse.Namespace) -> None:
 
     Separate from `fetch-transit`: a LineString network coloured per line, drawn
     under the station dots. No boundary clip (point-in-polygon doesn't apply to
-    lines — the map clips the overflow at view time), no aggregation.
+    lines - the map clips the overflow at view time), no aggregation.
     """
     city_id = args.city or 'paris'
     city = city_by_id(city_id)

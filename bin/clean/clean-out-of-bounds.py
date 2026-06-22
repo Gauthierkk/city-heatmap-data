@@ -4,7 +4,7 @@
 Background: before the boundary-clip was added to the fetcher, the Geoapify and
 Overture providers leaked places outside the city's clip zone (Geoapify clipped
 to its own larger "city" boundary, Overture to a bbox). A normal `make load`
-re-clips on write, but that needs a full refresh — and Geoapify credits may be
+re-clips on write, but that needs a full refresh - and Geoapify credits may be
 out. This script applies the *same* clip to the already-committed files in place,
 with no network calls, so the data matches the polygons immediately.
 
@@ -73,7 +73,7 @@ def main(argv: list[str] | None = None) -> int:
         if geom is None:
             print(
                 f'! {city_id}: no boundary at '
-                f'{_BOUNDARY_DIR / city_id / "boundary.geojson"} — skipping',
+                f'{_BOUNDARY_DIR / city_id / "boundary.geojson"} - skipping',
                 file=sys.stderr,
             )
             missing_boundary = True
@@ -88,7 +88,7 @@ def main(argv: list[str] | None = None) -> int:
             rel = geojson_path.relative_to(_REPO_ROOT)
             print(f'  {rel}: {before} -> {after}{flag}')
 
-    mode = 'dry run — no files changed' if args.dry_run else 'done'
+    mode = 'dry run - no files changed' if args.dry_run else 'done'
     print(f'\n{mode}. Total places {"found" if args.dry_run else "removed"} '
           f'(out-of-bounds + unnamed): {total_dropped}')
 

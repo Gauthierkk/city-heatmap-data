@@ -3,7 +3,7 @@
 Queries s3://overturemaps-us-west-2/release/<RELEASE>/theme=places/type=place/*
 via DuckDB (anonymous S3, hive-partitioned Parquet).
 
-duckdb is NOT a stdlib dependency — it is imported lazily (see duckdb_io) so
+duckdb is NOT a stdlib dependency - it is imported lazily (see duckdb_io) so
 OSM-only commands keep working without it. Install with `uv sync`; see
 fetcher/README.md for full dependency notes.
 """
@@ -18,7 +18,7 @@ from ..duckdb_io import connect, require_duckdb, sql_str_list
 from ..transform.geojson_io import make_feature
 
 # ---------------------------------------------------------------------------
-# Release pin — bump deliberately when a newer Overture release is available.
+# Release pin - bump deliberately when a newer Overture release is available.
 # Current: 2026-05-20.0
 # ---------------------------------------------------------------------------
 OVERTURE_RELEASE = "2026-05-20.0"
@@ -32,13 +32,13 @@ _S3_PATH = (
 OVERTURE_CONFIDENCE_MIN = 0.7
 
 # ---------------------------------------------------------------------------
-# Category mapping — validated by prototype query against Austin, Paris, NYC.
+# Category mapping - validated by prototype query against Austin, Paris, NYC.
 #
-# Excluded (validated junk — city-agnostic rules):
-#   fitness_trainer           — personal trainers, not venues
-#   adventure_sports_center   — CAD firms / outdoor-equipment retailers (Austin/NYC)
-#   health_coach              — hospital/medical systems (Austin/NYC)
-#   sports_and_fitness_instruction — swim schools, golf instruction, tennis (all cities)
+# Excluded (validated junk - city-agnostic rules):
+#   fitness_trainer           - personal trainers, not venues
+#   adventure_sports_center   - CAD firms / outdoor-equipment retailers (Austin/NYC)
+#   health_coach              - hospital/medical systems (Austin/NYC)
+#   sports_and_fitness_instruction - swim schools, golf instruction, tennis (all cities)
 # ---------------------------------------------------------------------------
 _CATEGORY_TO_TYPE: dict[str, str] = {
     "gym":                     "gym",
@@ -110,7 +110,7 @@ def fetch_overture(city: CityDef, dataset_id: str = 'fitness') -> dict[str, Any]
     )
 
     print(
-        f'Querying Overture {OVERTURE_RELEASE} — {city.id} fitness '
+        f'Querying Overture {OVERTURE_RELEASE} - {city.id} fitness '
         f'(conf≥{OVERTURE_CONFIDENCE_MIN}) ...'
     )
 

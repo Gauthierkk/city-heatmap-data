@@ -3,13 +3,13 @@
 SIRENE classifies every establishment by an APE/NAF activity code. We map the
 food-retail and fitness codes onto the SAME `shop` vocabulary the other providers
 emit (OSM `shop=*` values), so SIRENE points MERGE with existing OSM/Geoapify
-points instead of duplicating them — the food aggregation only merges records that
+points instead of duplicating them - the food aggregation only merges records that
 share a `shop` type (see transform/aggregate.py, cross_type=False).
 
 Deliberately excluded:
-  47.11E  magasins multi-commerces  — mixed/non-food bazaars, too noisy
-  47.26Z  commerce de tabac         — tobacconists, not a food shop
-  93.12Z / 85.51Z / 96.04Z          — broad "sport club / sport teaching / body
+  47.11E  magasins multi-commerces  - mixed/non-food bazaars, too noisy
+  47.26Z  commerce de tabac         - tobacconists, not a food shop
+  93.12Z / 85.51Z / 96.04Z          - broad "sport club / sport teaching / body
                                        upkeep" codes; they pull in football clubs,
                                        swim schools, spas and tanning salons, so
                                        fitness stays the narrow gym code only.
@@ -20,7 +20,7 @@ from __future__ import annotations
 # Specialised food retail (NAF 47.2x) + the two bakery-manufacture codes that
 # cover most French "boulangerie/pâtisserie" storefronts (10.71x), plus general
 # food retail (47.11x). 47.29Z is the catch-all specialist grocer (cheese,
-# chocolate, coffee…) — mapped to the generic 'food' bucket.
+# chocolate, coffee…) - mapped to the generic 'food' bucket.
 _FOOD: dict[str, str] = {
     '47.22Z': 'butcher',
     '47.23Z': 'seafood',
@@ -37,7 +37,7 @@ _FOOD: dict[str, str] = {
     '47.29Z': 'food',
 }
 
-# "Activités des centres de culture physique" — gyms/fitness centres.
+# "Activités des centres de culture physique" - gyms/fitness centres.
 _FITNESS: dict[str, str] = {
     '93.13Z': 'gym',
 }

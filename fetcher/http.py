@@ -3,11 +3,11 @@
 One `User-Agent`, one Overpass endpoint list, and the two request patterns every
 provider used to re-implement:
 
-  - `get_json`      — GET a JSON endpoint, retrying transient (5xx / network)
+  - `get_json`      - GET a JSON endpoint, retrying transient (5xx / network)
                       errors and failing fast on 4xx. Used by Geoapify, the Paris
                       trees/transit bulk exports, the data.gouv resource lookup,
                       and the polygons.openstreetmap.fr boundary source.
-  - `post_overpass` — POST an Overpass QL query to each mirror in turn until one
+  - `post_overpass` - POST an Overpass QL query to each mirror in turn until one
                       succeeds. Used by the OSM stores fetch and the boundary
                       fallback.
 
@@ -59,7 +59,7 @@ def get_json(url: str, *, timeout: int = 60, retries: int = 3) -> Any:
             if 400 <= exc.code < 500:
                 raise RuntimeError(f'HTTP {exc.code} for {url}: {exc.read().decode()[:200]}') from None
             last_error = exc
-        except Exception as exc:  # transient network / 5xx — retry
+        except Exception as exc:  # transient network / 5xx - retry
             last_error = exc
     raise RuntimeError(f'Request to {url} failed after {retries} attempt(s): {last_error}')
 

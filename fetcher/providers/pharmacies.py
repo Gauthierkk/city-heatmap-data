@@ -1,11 +1,11 @@
-"""Paris pharmacy fetch — "Carte des pharmacies de Paris" (Région Île-de-France
+"""Paris pharmacy fetch - "Carte des pharmacies de Paris" (Région Île-de-France
 open data, dataset `carte-des-pharmacies-de-paris` on data.iledefrance.fr).
 
 A SEPARATE pipeline (like trees / transit): a single authoritative source, one
 point per pharmacy, no merge and no OSM backbone. The output is a normal
 store-shaped `FeatureCollection` with `shop = 'pharmacy'`, so it flows through
 the front end's places machinery (dots, the distance-to-nearest overlay, the
-type filter and the closest-places list) with no app-side special-casing — the
+type filter and the closest-places list) with no app-side special-casing - the
 same trick fitness/transit use by reusing the `shop` property key.
 
 PARIS-ONLY semantics like the other Paris-specific providers: the source is the
@@ -65,7 +65,7 @@ def fetch_pharmacies(city: CityDef) -> dict[str, Any]:
         print(f'  pharmacies: no dataset for {city.id} (Paris-only)', file=sys.stderr)
         return {'type': 'FeatureCollection', 'features': []}
 
-    print(f'Querying Région Île-de-France (carte-des-pharmacies-de-paris) — {city.id} ...')
+    print(f'Querying Région Île-de-France (carte-des-pharmacies-de-paris) - {city.id} ...')
     records = get_json(_EXPORT_URL, timeout=_TIMEOUT_S)
     print(f'  Retrieved {len(records)} pharmacy records for {city.id}', file=sys.stderr)
 

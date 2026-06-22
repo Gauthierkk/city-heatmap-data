@@ -6,10 +6,10 @@ stale, so we resolve the current Parquet resource by querying the dataset's API
 and picking the right resource by format + title.
 
   - Geolocation (INSEE):  dataset 61d5e2d372a52d9f9411ff88
-      one Parquet resource — `siret` + `x_longitude`/`y_latitude` (already WGS84).
+      one Parquet resource - `siret` + `x_longitude`/`y_latitude` (already WGS84).
   - StockEtablissement (SIRENE base): dataset slug below
       several Parquet resources (StockEtablissement, …Historique, …LiensSuccession,
-      StockUniteLegale) — we want the plain establishment stock.
+      StockUniteLegale) - we want the plain establishment stock.
 """
 
 from __future__ import annotations

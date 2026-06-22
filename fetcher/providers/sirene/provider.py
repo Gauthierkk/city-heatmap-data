@@ -1,4 +1,4 @@
-"""SIRENE establishment fetch — Paris-only food/fitness enrichment.
+"""SIRENE establishment fetch - Paris-only food/fitness enrichment.
 
 Joins INSEE's geocoded SIRENE file (siret → WGS84 lon/lat) against the SIRENE
 StockEtablissement base (siret → activity code, name, address) over DuckDB,
@@ -95,7 +95,7 @@ def fetch_sirene(city: CityDef, dataset_id: str = 'food') -> dict[str, Any]:
         naf_codes=sql_str_list(naf_codes),
     )
 
-    print(f'Querying SIRENE (data.gouv) — paris {dataset_id} ...')
+    print(f'Querying SIRENE (data.gouv) - paris {dataset_id} ...')
 
     con = connect(duckdb)
     rows = con.execute(query).fetchall()

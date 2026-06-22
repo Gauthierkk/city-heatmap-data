@@ -36,7 +36,7 @@ def require_duckdb(provider: str) -> Any:
 def connect(duckdb: Any, *, spatial: bool = False, s3: bool = False) -> Any:
     """Open a DuckDB connection with httpfs (+ optional spatial / anonymous S3).
 
-    httpfs is always loaded — both providers stream remote Parquet over HTTP.
+    httpfs is always loaded - both providers stream remote Parquet over HTTP.
     Anonymous S3 (`s3=True`) targets the public Overture us-west-2 bucket. The
     progress bar is disabled so logs stay clean in non-interactive runs.
     """

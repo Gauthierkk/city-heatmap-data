@@ -1,7 +1,7 @@
 """Data-source providers and the registry used to select them.
 
 Each Provider is a uniform `fetch(city, dataset_id) -> FeatureCollection`. The
-`name` is only used for CLI selection and log lines — it is NOT written to the
+`name` is only used for CLI selection and log lines - it is NOT written to the
 output (the downstream merge is source-agnostic).
 
 To add a provider: implement a `fetch(city, dataset_id)` and append a Provider

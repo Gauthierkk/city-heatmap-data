@@ -1,13 +1,13 @@
-"""Paris transit-line geometry — IDFM `traces-du-reseau-ferre-idf`.
+"""Paris transit-line geometry - IDFM `traces-du-reseau-ferre-idf`.
 
-The route geometry (LineStrings) of the rail network — one segment per row, each
+The route geometry (LineStrings) of the rail network - one segment per row, each
 carrying its mode, line designation (`indice_lig`) and the official line colour
 (`colourweb_hexa`). The front end draws these as coloured lines beneath the
 transit station dots, so the colour comes straight from the source (no colour map).
 
 A SEPARATE Paris-only pipeline (`fetch-transit-lines`), like trees/transit. We
 keep **metro + RER + tram** (mainline TER/TRAIN, navettes and cable excluded) and
-only the segments that enter the Paris bbox — segments extending past the city are
+only the segments that enter the Paris bbox - segments extending past the city are
 clipped by the map's `maxBounds` at view time, so no geometric polygon clip is
 needed (and point-in-polygon doesn't apply to LineStrings anyway).
 
@@ -35,7 +35,7 @@ _SELECT = 'geo_shape,mode,indice_lig,colourweb_hexa'
 
 _TIMEOUT_S = 120
 
-# Line vertices kept to 5 dp (~1 m) — plenty for a schematic overlay and it trims
+# Line vertices kept to 5 dp (~1 m) - plenty for a schematic overlay and it trims
 # the many-vertex LineStrings.
 _LINE_DP = 5
 
@@ -91,7 +91,7 @@ def fetch_transit_lines(city: CityDef) -> dict[str, Any]:
         return {'type': 'FeatureCollection', 'features': []}
 
     url = f'{_EXPORT_URL}?{urllib.parse.urlencode({"select": _SELECT})}'
-    print(f'Querying IDF Mobilités (traces-du-reseau-ferre-idf) — {city.id} ...')
+    print(f'Querying IDF Mobilités (traces-du-reseau-ferre-idf) - {city.id} ...')
     raw = get_json(url, timeout=_TIMEOUT_S)
     src = raw.get('features') or []
     print(f'  Retrieved {len(src)} line segments for {city.id}', file=sys.stderr)
